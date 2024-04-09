@@ -1,0 +1,8 @@
+LR = 0.001
+hid_size = 300
+emb_size=300
+optimizer=<class 'torch.optim.adamw.AdamW'>
+model=<class 'model.LSTM'>
+emb_dropout=0.4
+out_dropout=0.4
+Test ppl:  109.71018260871152 + Epochs: 58/100 
