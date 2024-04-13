@@ -40,13 +40,15 @@ if __name__ == "__main__":
     # A large model tends to overfit
     hid_size = 350
     emb_size = 350
-    emb_dropout = 0.4
-    out_dropout = 0.4
+    emb_dropout = 0.2
+    out_dropout = 0.2
+    nonMono = 5
+    wdecay = 1.2e-6
 
     # Don't forget to experiment with a lower training batch size
     # Increasing the back propagation steps can be seen as a regularization step
 
-    lr = 0.001 # This is definitely not good for SGD
+    lr = 10 # This is definitely not good for SGD
     clip = 5 # Clip the gradient
     device = 'cuda:0'
 
@@ -55,7 +57,7 @@ if __name__ == "__main__":
     model = LSTM(emb_size, hid_size, vocab_len, pad_index=lang.word2id["<pad>"],emb_dropout=emb_dropout,out_dropout=emb_dropout).to(device)
     model.apply(init_weights)
 
-    optimizer = optim.AdamW(model.parameters(), lr=lr)
+    optimizer = optim.SGD(model.parameters(), lr=lr, weight_decay= wdecay)
     criterion_train = nn.CrossEntropyLoss(ignore_index=lang.word2id["<pad>"])
     criterion_eval = nn.CrossEntropyLoss(ignore_index=lang.word2id["<pad>"], reduction='sum')
     n_epochs = 100
@@ -72,6 +74,14 @@ if __name__ == "__main__":
         loss = train_loop(train_loader, optimizer, criterion_train, model, clip)
 
         if epoch % 1 == 0:
+
+            if ((len(losses_train)>nonMono) and (loss > min(losses_train[:-nonMono])) ):
+                print('Switching to ASGD')
+                optimizer = torch.optim.ASGD(model.parameters(), lr=lr, t0=0, lambd=0., weight_decay=wdecay)
+
+            if epoch % 5 == 0:
+                lr = lr * 0.75
+
             sampled_epochs.append(epoch)
             losses_train.append(np.asarray(loss).mean())
             ppl_dev, loss_dev = eval_loop(dev_loader, criterion_eval, model)
@@ -86,13 +96,18 @@ if __name__ == "__main__":
                 patience -= 1
 
             if patience <= 0: # Early stopping with patience
-                break # Not nice but it keeps the code clean
+                if isinstance(optimizer,torch.optim.SGD):
+                    print('Switching to ASGD')
+                    optimizer = torch.optim.ASGD(model.parameters(), lr=lr, t0=0, lambd=0., weight_decay=wdecay)
+                    patience = 3
+                else:
+                    break # Not nice but it keeps the code clean
 
     best_model.to(device)
     final_ppl,  _ = eval_loop(test_loader, criterion_eval, best_model)
     print('Test ppl: ', final_ppl)
 
-    configurations = f'LR = {lr}\nhid_size = {hid_size}\nemb_size={emb_size}\noptimizer={str(type(optimizer))}\nmodel={str(type(model))}\nemb_dropout={emb_dropout}\nout_dropout={out_dropout}\n'
+    configurations = f'LR = {lr}\nhid_size = {hid_size}\nemb_size={emb_size}\noptimizer={str(type(optimizer))}\nmodel={str(type(model))}\nemb_dropout={emb_dropout}\nout_dropout={out_dropout}\nwdecay={wdecay}\nnonMono={nonMono}\n'
     results_txt = f'{configurations}Test ppl:  {final_ppl} + Epochs: {sampled_epochs[-1]}/{n_epochs} ' 
 
     save_model_incrementally(best_model,sampled_epochs,losses_train,losses_dev,ppl_history,results_txt)
