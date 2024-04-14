@@ -41,17 +41,17 @@ if __name__ == "__main__":
     # Print the results
     # Experiment also with a smaller or bigger model by changing hid and emb sizes
     # A large model tends to overfit
-    hid_size = 350
-    emb_size = 350
-    emb_dropout = 0.2
-    out_dropout = 0.2
+    hid_size = 650
+    emb_size = 650
+    emb_dropout = 0.6
+    out_dropout = 0.6
     nonMono = 5
     wdecay = 1.2e-6
 
     # Don't forget to experiment with a lower training batch size
     # Increasing the back propagation steps can be seen as a regularization step
 
-    lr = 5 # This is definitely not good for SGD
+    lr = 10 # This is definitely not good for SGD
     clip = 5 # Clip the gradient
     device = 'cuda:0'
 
@@ -84,8 +84,11 @@ if __name__ == "__main__":
 
             # if epoch % 5 == 0 and lr * 0.75 > 1:
             #     lr = lr * 0.75
-            if epoch % 5 == 0 and lr * 0.75 > 1:
-                lr = lr * 0.75
+            if epoch % 5 == 0 :
+                if (lr *0.75) < 1.5 :
+                    lr = 1.5
+                else:
+                    lr = lr * 0.75
 
             sampled_epochs.append(epoch)
             losses_train.append(np.asarray(loss).mean())
@@ -112,7 +115,7 @@ if __name__ == "__main__":
     final_ppl,  _ = eval_loop(test_loader, criterion_eval, best_model)
     print('Test ppl: ', final_ppl)
 
-    configurations = f'LR = {lr}\nhid_size = {hid_size}\nemb_size={emb_size}\noptimizer={str(type(optimizer))}\nmodel={str(type(model))}\nemb_dropout={emb_dropout}\nout_dropout={out_dropout}\nwdecay={wdecay}\nnonMono={nonMono}\n'
+    configurations = f'LR = {lr}\nhid_size = {hid_size}\nemb_size={emb_size}\noptimizer={str(type(optimizer))}\nmodel={str(type(model))}\nemb_dropout={emb_dropout}\nout_dropout={out_dropout}\nwdecay={wdecay}\nnonMono={nonMono}\nbatch{batch_train}\n'
     results_txt = f'{configurations}Test ppl:  {final_ppl} + Epochs: {sampled_epochs[-1]}/{n_epochs} ' 
 
     save_model_incrementally(best_model,sampled_epochs,losses_train,losses_dev,ppl_history,results_txt)
