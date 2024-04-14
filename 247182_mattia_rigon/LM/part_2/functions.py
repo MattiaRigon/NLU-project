@@ -5,6 +5,7 @@ import os
 import matplotlib.pyplot as plt
 import time
 import numpy as np
+import copy
 
 
 def get_batch(data, i, bptt, seq_len=None, evaluation=False):
@@ -13,12 +14,16 @@ def get_batch(data, i, bptt, seq_len=None, evaluation=False):
     target = data[i+1:i+1+seq_len].view(-1)
     return source, target
 
-def train_loop(data, optimizer, criterion, model, clip=5):
+def train_loop(data, optimizer, criterion, model, average_seq_len,clip=5):
     model.train()
     loss_array = []
     number_of_tokens = []
+    original_lr = copy.deepcopy(optimizer.param_groups[0]['lr'])
 
     for sample in data:
+        seq_len_adjusted_lr = original_lr * (sample["number_tokens"] / average_seq_len)  # average_seq_len deve essere definito o calcolato
+        optimizer.param_groups[0]['lr'] = seq_len_adjusted_lr  # Impostare il learning rate modificato
+
         optimizer.zero_grad() # Zeroing the gradient
         output = model(sample['source'])
         loss = criterion(output, sample['target'])
@@ -28,6 +33,7 @@ def train_loop(data, optimizer, criterion, model, clip=5):
         # clip the gradient to avoid explosioning gradients
         torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
         optimizer.step() # Update the weights
+        optimizer.param_groups[0]['lr'] = original_lr  # Ripristinare il learning rate originale
 
     return sum(loss_array)/sum(number_of_tokens)
 
@@ -179,3 +185,20 @@ def save_plot_ppl(sampled_epochs,ppl_history,path):
     plt.tight_layout()  
 
     plt.savefig(os.path.join(path,"ppl.png")) 
+
+
+def calculate_average_seq_len(data_loader):
+    total_length = 0
+    count = 0
+    
+    for batch in data_loader:
+        # Assumiamo che `batch` sia un dizionario con le chiavi 'source' e 'target'
+        # dove 'source' è il tensore contenente le sequenze di input
+        batch_seq_lengths = batch['source'].shape[1]  # Prendi la dimensione della sequenza, assumendo che le sequenze siano allineate sulla seconda dimensione
+        
+        total_length += batch_seq_lengths * batch['source'].shape[0]  # Moltiplica la lunghezza della sequenza per il numero di elementi nel batch
+        count += batch['source'].shape[0]  # Conta il numero totale di sequenze
+    
+    # Calcola la lunghezza media delle sequenze
+    average_seq_len = total_length / count if count != 0 else 0
+    return average_seq_len

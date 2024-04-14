@@ -20,8 +20,8 @@ if __name__ == "__main__":
     # Dataloader instantiation
     # You can reduce the batch_size if the GPU memory is not enough
 
-    batch_train = 80
-    batch_dev_test = 256
+    batch_train = 20
+    batch_dev_test = 80
 
     train_raw = read_file("dataset/PennTreeBank/ptb.train.txt")
     dev_raw = read_file("dataset/PennTreeBank/ptb.valid.txt")
@@ -56,6 +56,7 @@ if __name__ == "__main__":
     device = 'cuda:0'
 
     vocab_len = len(lang.word2id)
+    average_seq_len =  calculate_average_seq_len(train_loader)
 
     model = LSTM(emb_size, hid_size, vocab_len, pad_index=lang.word2id["<pad>"],emb_dropout=emb_dropout,out_dropout=emb_dropout).to(device)
     model.apply(init_weights)
@@ -64,7 +65,7 @@ if __name__ == "__main__":
     criterion_train = nn.CrossEntropyLoss(ignore_index=lang.word2id["<pad>"])
     criterion_eval = nn.CrossEntropyLoss(ignore_index=lang.word2id["<pad>"], reduction='sum')
     n_epochs = 100
-    patience = 3
+    patience = 5
     losses_train = []
     losses_dev = []
     sampled_epochs = []
@@ -74,16 +75,10 @@ if __name__ == "__main__":
     pbar = tqdm(range(1,n_epochs))
     #If the PPL is too high try to change the learning rate
     for epoch in pbar:
-        loss = train_loop(train_loader, optimizer, criterion_train, model, clip)
+        loss = train_loop(train_loader, optimizer, criterion_train, model, average_seq_len, clip=clip)
 
         if epoch % 1 == 0:
 
-            if ((len(losses_train)>nonMono) and (loss > min(losses_train[:-nonMono])) ):
-                print('Switching to ASGD')
-                optimizer = torch.optim.ASGD(model.parameters(), lr=lr, t0=0, lambd=0., weight_decay=wdecay)
-
-            # if epoch % 5 == 0 and lr * 0.75 > 1:
-            #     lr = lr * 0.75
             if epoch % 5 == 0 :
                 if (lr *0.75) < 1.5 :
                     lr = 1.5
@@ -99,7 +94,7 @@ if __name__ == "__main__":
             if  ppl_dev < best_ppl: # the lower, the better
                 best_ppl = ppl_dev
                 best_model = copy.deepcopy(model).to('cpu')
-                patience = 3
+                patience = 5
             else:
                 patience -= 1
 
@@ -107,7 +102,7 @@ if __name__ == "__main__":
                 if isinstance(optimizer,torch.optim.SGD):
                     print('Switching to ASGD')
                     optimizer = torch.optim.ASGD(model.parameters(), lr=lr, t0=0, lambd=0., weight_decay=wdecay)
-                    patience = 3
+                    patience = 5
                 else:
                     break # Not nice but it keeps the code clean
 
