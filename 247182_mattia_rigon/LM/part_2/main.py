@@ -20,6 +20,9 @@ if __name__ == "__main__":
     # Dataloader instantiation
     # You can reduce the batch_size if the GPU memory is not enough
 
+    batch_train = 80
+    batch_dev_test = 256
+
     train_raw = read_file("dataset/PennTreeBank/ptb.train.txt")
     dev_raw = read_file("dataset/PennTreeBank/ptb.valid.txt")
     test_raw = read_file("dataset/PennTreeBank/ptb.test.txt")
@@ -30,9 +33,9 @@ if __name__ == "__main__":
     dev_dataset = PennTreeBank(dev_raw, lang)
     test_dataset = PennTreeBank(test_raw, lang)
 
-    train_loader = DataLoader(train_dataset, batch_size=256, collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]),  shuffle=True)
-    dev_loader = DataLoader(dev_dataset, batch_size=1024, collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]))
-    test_loader = DataLoader(test_dataset, batch_size=1024, collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]))
+    train_loader = DataLoader(train_dataset, batch_size=batch_train, collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]),  shuffle=True)
+    dev_loader = DataLoader(dev_dataset, batch_size=batch_dev_test, collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]))
+    test_loader = DataLoader(test_dataset, batch_size=batch_dev_test, collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]))
 
     #Wrtite the code to load the datasets and to run your functions
     # Print the results
@@ -81,6 +84,8 @@ if __name__ == "__main__":
 
             # if epoch % 5 == 0 and lr * 0.75 > 1:
             #     lr = lr * 0.75
+            if epoch % 5 == 0 and lr * 0.75 > 1:
+                lr = lr * 0.75
 
             sampled_epochs.append(epoch)
             losses_train.append(np.asarray(loss).mean())
