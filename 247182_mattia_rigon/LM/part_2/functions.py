@@ -21,7 +21,8 @@ def train_loop(data, optimizer, criterion, model, average_seq_len,clip=5):
     original_lr = copy.deepcopy(optimizer.param_groups[0]['lr'])
 
     for sample in data:
-        seq_len_adjusted_lr = original_lr * (sample["number_tokens"] / average_seq_len)  # average_seq_len deve essere definito o calcolato
+        seq_len = sample['source'].shape[1]
+        seq_len_adjusted_lr = original_lr * (seq_len / average_seq_len)  # average_seq_len deve essere definito o calcolato
         optimizer.param_groups[0]['lr'] = seq_len_adjusted_lr  # Impostare il learning rate modificato
 
         optimizer.zero_grad() # Zeroing the gradient
