@@ -8,3 +8,5 @@ out_dropout=0.2
 wdecay=1.2e-06
 nonMono=5
 Test ppl:  110.616338988627 + Epochs: 44/100 
+
+lr from 5 and 0.75 each 5 time

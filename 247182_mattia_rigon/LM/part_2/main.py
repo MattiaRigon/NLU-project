@@ -48,7 +48,7 @@ if __name__ == "__main__":
     # Don't forget to experiment with a lower training batch size
     # Increasing the back propagation steps can be seen as a regularization step
 
-    lr = 10 # This is definitely not good for SGD
+    lr = 5 # This is definitely not good for SGD
     clip = 5 # Clip the gradient
     device = 'cuda:0'
 
@@ -79,8 +79,8 @@ if __name__ == "__main__":
                 print('Switching to ASGD')
                 optimizer = torch.optim.ASGD(model.parameters(), lr=lr, t0=0, lambd=0., weight_decay=wdecay)
 
-            if epoch % 5 == 0:
-                lr = lr * 0.75
+            # if epoch % 5 == 0 and lr * 0.75 > 1:
+            #     lr = lr * 0.75
 
             sampled_epochs.append(epoch)
             losses_train.append(np.asarray(loss).mean())

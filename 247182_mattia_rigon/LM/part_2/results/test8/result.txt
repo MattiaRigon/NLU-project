@@ -1,0 +1,10 @@
+LR = 1.001129150390625
+hid_size = 350
+emb_size=350
+optimizer=<class 'torch.optim.asgd.ASGD'>
+model=<class 'model.LSTM'>
+emb_dropout=0.2
+out_dropout=0.2
+wdecay=1.2e-06
+nonMono=5
+Test ppl:  106.67278712733862 + Epochs: 99/100 
