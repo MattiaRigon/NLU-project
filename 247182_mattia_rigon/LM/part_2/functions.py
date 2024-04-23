@@ -7,13 +7,6 @@ import time
 import numpy as np
 import copy
 
-
-def get_batch(data, i, bptt, seq_len=None, evaluation=False):
-    seq_len = min(seq_len if seq_len else bptt, len(data) - 1 - i)
-    source = data[i:i+seq_len]
-    target = data[i+1:i+1+seq_len].view(-1)
-    return source, target
-
 def train_loop(data, optimizer, criterion, model, average_seq_len,clip=5):
     model.train()
     loss_array = []
@@ -37,54 +30,6 @@ def train_loop(data, optimizer, criterion, model, average_seq_len,clip=5):
         optimizer.param_groups[0]['lr'] = original_lr  # Ripristinare il learning rate originale
 
     return sum(loss_array)/sum(number_of_tokens)
-
-def repackage_hidden(h):
-    """Wraps hidden states in new Tensors,
-    to detach them from their history."""
-    if isinstance(h, torch.Tensor):
-        return h.detach()
-    else:
-        return tuple(repackage_hidden(v) for v in h)
-
-
-
-def train(data, optimizer, criterion, model,batch_size, clip=5, _bptt=70):
-    # Turn on training mode which enables dropout.
-    total_loss = 0
-    start_time = time.time()
-    hidden = model.init_hidden(batch_size)
-    batch, i = 0, 0
-    for i, sample in enumerate(data):
-        bptt = _bptt if np.random.random() < 0.95 else _bptt / 2.
-        # Prevent excessively small or negative sequence lengths
-        seq_len = max(5, int(np.random.normal(bptt, 5)))
-        # There's a very small chance that it could select a very long sequence length resulting in OOM
-        # seq_len = min(seq_len, args.bptt + 10)
-
-        lr2 = optimizer.param_groups[0]['lr']
-        optimizer.param_groups[0]['lr'] = lr2 * seq_len / _bptt
-        model.train()
-        # Starting each batch, we detach the hidden state from how it was previously produced.
-        # If we didn't, the model would try backpropagating all the way to start of the dataset.
-        optimizer.zero_grad()
-
-        output = model(sample['source'])
-        loss = criterion(output, sample['target'])
-
-        # Activiation Regularization
-        loss.backward()
-
-        # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
-        torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
-        optimizer.step() # Update the weights
-
-
-        total_loss += loss
-        optimizer.param_groups[0]['lr'] = lr2
-
-        ###
-        batch += 1
-        i += seq_len
 
 def eval_loop(data, eval_criterion, model):
     model.eval()
