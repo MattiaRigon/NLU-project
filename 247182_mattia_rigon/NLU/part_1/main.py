@@ -71,8 +71,8 @@ if __name__ == "__main__":
     dev_loader = DataLoader(dev_dataset, batch_size=64, collate_fn=collate_fn)
     test_loader = DataLoader(test_dataset, batch_size=64, collate_fn=collate_fn)
     
-    hid_size = 200
-    emb_size = 300
+    hid_size = 350
+    emb_size = 350
 
     lr = 0.0001 # learning rate
     clip = 5 # Clip the gradient

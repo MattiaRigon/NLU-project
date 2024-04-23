@@ -1,0 +1,8 @@
+LR = 5e-05
+hid_size = 200
+emb_size=300
+optimizer=<class 'torch.optim.adam.Adam'>
+model=<class 'model.ModelIAS'>
+Intent Accuracy:  0.9395296752519597
+Slot F1: 0.9257163070392642
+Epochs: 190/200 
