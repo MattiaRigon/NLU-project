@@ -1,5 +1,8 @@
 # Add the class of your model only
 # Here is where you define the architecture of your model using pytorch
+import os
+
+from matplotlib import pyplot as plt
 from conll import evaluate
 from sklearn.metrics import classification_report
 import torch.nn as nn
@@ -95,3 +98,66 @@ def init_weights(mat):
                 torch.nn.init.uniform_(m.weight, -0.01, 0.01)
                 if m.bias != None:
                     m.bias.data.fill_(0.01)
+
+def save_model_incrementally(model, sampled_epochs, losses_train, losses_dev, accuracy_history, results_txt,model_name='model.pth'):
+    """
+    Saves a PyTorch model in an incrementally named test folder within a results directory.
+
+    Args:
+    - model (torch.nn.Module): The PyTorch model to save.
+    - model_name (str, optional): The name of the saved model file. Default is 'model.pth'.
+    """
+    # Ensure the 'results' directory exists
+    results_dir = 'results'
+    os.makedirs(results_dir, exist_ok=True)
+
+    # Find the next available folder name
+    test_folder_name = 'test0'
+    i = 0
+    while os.path.exists(os.path.join(results_dir, test_folder_name)):
+        i += 1
+        test_folder_name = f'test{i}'
+
+    # Create the new test directory
+    new_test_dir = os.path.join(results_dir, test_folder_name)
+    os.makedirs(new_test_dir)
+
+    save_plot_losses(sampled_epochs,losses_train,losses_dev,new_test_dir)
+    save_plot_accuracy(sampled_epochs,accuracy_history,new_test_dir)
+    with open(os.path.join(new_test_dir,"result.txt"), 'w') as file:
+        file.write(results_txt)
+    # Save the model in the new directory
+    model_path = os.path.join(new_test_dir, model_name)
+    torch.save(model.state_dict(), model_path)
+    print(f'Model saved to {model_path}')
+
+def save_plot_losses(sampled_epochs,losses_train,losses_dev,path):
+
+    plt.figure(figsize=(10, 6)) 
+
+    plt.plot(sampled_epochs, losses_train, label='Training Loss', marker='o') 
+    plt.plot(sampled_epochs, losses_dev, label='Validation Loss', marker='s')  
+
+    plt.title('Training and Validation Loss')  
+    plt.xlabel('Epochs') 
+    plt.ylabel('Loss')  
+    plt.legend()
+
+    plt.grid(True)  
+    plt.tight_layout()  
+
+    plt.savefig(os.path.join(path,"losses.png")) 
+
+def save_plot_accuracy(sampled_epochs,accuracy_history,path):
+
+    plt.figure(figsize=(10, 6)) 
+    plt.plot(sampled_epochs, accuracy_history, label='accuracy', marker='o')  
+    plt.title('PPL')  
+    plt.xlabel('Epochs')  
+    plt.ylabel('Loss')  
+    plt.legend() 
+
+    plt.grid(True) 
+    plt.tight_layout()  
+
+    plt.savefig(os.path.join(path,"accuracy.png")) 

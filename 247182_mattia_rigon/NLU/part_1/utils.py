@@ -2,6 +2,9 @@ import torch
 import torch.utils.data as data
 from collections import Counter
 from torch.utils.data import DataLoader
+import json
+PAD_TOKEN = 0
+device = 'cuda:0'
 
 
 def load_data(path):

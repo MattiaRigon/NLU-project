@@ -12,7 +12,7 @@ class ModelIAS(nn.Module):
         
         self.embedding = nn.Embedding(vocab_len, emb_size, padding_idx=pad_index)
         
-        self.utt_encoder = nn.LSTM(emb_size, hid_size, n_layer, bidirectional=False, batch_first=True)    
+        self.utt_encoder = nn.LSTM(emb_size, hid_size, n_layer, bidirectional=True, batch_first=True)    
         self.slot_out = nn.Linear(hid_size, out_slot)
         self.intent_out = nn.Linear(hid_size, out_int)
         # Dropout layer How/Where do we apply it?
