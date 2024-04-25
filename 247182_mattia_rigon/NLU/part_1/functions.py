@@ -7,6 +7,7 @@ from conll import evaluate
 from sklearn.metrics import classification_report
 import torch.nn as nn
 import torch
+import json
 
 
 def train_loop(data, optimizer, criterion_slots, criterion_intents, model, clip=5):
@@ -99,7 +100,7 @@ def init_weights(mat):
                 if m.bias != None:
                     m.bias.data.fill_(0.01)
 
-def save_model_incrementally(model, sampled_epochs, losses_train, losses_dev, accuracy_history, results_txt,model_name='model.pth'):
+def save_model_incrementally(model, sampled_epochs, losses_train, losses_dev, accuracy_history, results,model_name='model.pth'):
     """
     Saves a PyTorch model in an incrementally named test folder within a results directory.
 
@@ -124,8 +125,12 @@ def save_model_incrementally(model, sampled_epochs, losses_train, losses_dev, ac
 
     save_plot_losses(sampled_epochs,losses_train,losses_dev,new_test_dir)
     save_plot_accuracy(sampled_epochs,accuracy_history,new_test_dir)
-    with open(os.path.join(new_test_dir,"result.txt"), 'w') as file:
-        file.write(results_txt)
+    # Save the results dictionary as a JSON file
+    results_path = os.path.join(new_test_dir, 'results.json')
+    with open(results_path, 'w') as f:
+        json.dump(results, f)
+
+    print(f'Results saved to {results_path}')
     # Save the model in the new directory
     model_path = os.path.join(new_test_dir, model_name)
     torch.save(model.state_dict(), model_path)
