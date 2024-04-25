@@ -3,6 +3,7 @@
 import os
 
 from matplotlib import pyplot as plt
+import numpy as np
 from conll import evaluate
 from sklearn.metrics import classification_report
 import torch.nn as nn
@@ -127,6 +128,9 @@ def save_model_incrementally(model, sampled_epochs, losses_train, losses_dev, ac
     save_plot_accuracy(sampled_epochs,accuracy_history,new_test_dir)
     # Save the results dictionary as a JSON file
     results_path = os.path.join(new_test_dir, 'results.json')
+    for key, value in results.items():
+            if isinstance(value, np.ndarray):
+                results[key] = value.tolist()
     with open(results_path, 'w') as f:
         json.dump(results, f)
 
@@ -140,8 +144,14 @@ def save_plot_losses(sampled_epochs,losses_train,losses_dev,path):
 
     plt.figure(figsize=(10, 6)) 
 
-    plt.plot(sampled_epochs, losses_train, label='Training Loss', marker='o') 
-    plt.plot(sampled_epochs, losses_dev, label='Validation Loss', marker='s')  
+    prev = 0
+    i = 0
+    for epochs_run in sampled_epochs:
+        epochs = len(epochs_run)
+        plt.plot(epochs_run, losses_train[prev:prev+epochs], label=f'Training Loss {i}', marker='o') 
+        plt.plot(epochs_run, losses_dev[prev:prev+epochs], label=f'Validation Loss {i}', marker='s')  
+        prev += epochs
+        i += 1
 
     plt.title('Training and Validation Loss')  
     plt.xlabel('Epochs') 
@@ -156,10 +166,16 @@ def save_plot_losses(sampled_epochs,losses_train,losses_dev,path):
 def save_plot_accuracy(sampled_epochs,accuracy_history,path):
 
     plt.figure(figsize=(10, 6)) 
-    plt.plot(sampled_epochs, accuracy_history, label='accuracy', marker='o')  
-    plt.title('PPL')  
+    prev = 0
+    i = 0
+    for epochs_run in sampled_epochs:
+        epochs = len(epochs_run)
+        plt.plot(epochs_run, accuracy_history[prev:prev+epochs], label=f'Training Loss {i}', marker='o') 
+        prev += epochs
+        i += 1    
+    plt.title('Accuracy')  
     plt.xlabel('Epochs')  
-    plt.ylabel('Loss')  
+    plt.ylabel('accuracy')  
     plt.legend() 
 
     plt.grid(True) 

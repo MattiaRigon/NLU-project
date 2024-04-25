@@ -76,12 +76,6 @@ if __name__ == "__main__":
     out_int = len(lang.intent2id)
     vocab_len = len(lang.word2id)
 
-    model = ModelIAS(hid_size, out_slot, out_int, emb_size, vocab_len, pad_index=PAD_TOKEN).to(device)
-    model.apply(init_weights)
-
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-    criterion_slots = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN)
-    criterion_intents = nn.CrossEntropyLoss() # Because we do not have the pad token
     n_epochs = 200
     patience = 3
     losses_train = []
@@ -94,33 +88,30 @@ if __name__ == "__main__":
     runs = 5
     slot_f1s, intent_acc = [], []
     for x in tqdm(range(0, runs)):
-        model = ModelIAS(hid_size, out_slot, out_int, emb_size, 
-                        vocab_len, pad_index=PAD_TOKEN).to(device)
-        model.apply(init_weights)
 
+        model = ModelIAS(hid_size, out_slot, out_int, emb_size, vocab_len, pad_index=PAD_TOKEN).to(device)
+        model.apply(init_weights)
         optimizer = optim.Adam(model.parameters(), lr=lr)
         criterion_slots = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN)
-        criterion_intents = nn.CrossEntropyLoss()
-        
-
-        patience = 3
-        losses_train = []
-        losses_dev = []
-        sampled_epochs = []
+        criterion_intents = nn.CrossEntropyLoss() # Because we do not have the pad token
+        _sampled_epochs = []
         best_f1 = 0
         for x in range(1,n_epochs):
             loss = train_loop(train_loader, optimizer, criterion_slots, 
                             criterion_intents, model)
             if x % 5 == 0:
-                sampled_epochs.append(x)
+                _sampled_epochs.append(x)
                 losses_train.append(np.asarray(loss).mean())
                 results_dev, intent_res, loss_dev = eval_loop(dev_loader, criterion_slots, 
                                                             criterion_intents, model, lang)
                 losses_dev.append(np.asarray(loss_dev).mean())
                 f1 = results_dev['total']['f']
+                accuracy_history.append(intent_res['accuracy'])
 
                 if f1 > best_f1:
                     best_f1 = f1
+                    best_model = copy.deepcopy(model).to('cpu')
+                    patience = 3
                 else:
                     patience -= 1
                 if patience <= 0: # Early stopping with patient
@@ -130,7 +121,7 @@ if __name__ == "__main__":
                                                 criterion_intents, model, lang)
         intent_acc.append(intent_test['accuracy'])
         slot_f1s.append(results_test['total']['f'])
-
+        sampled_epochs.append(_sampled_epochs)
 
     slot_f1s = np.asarray(slot_f1s)
     intent_acc = np.asarray(intent_acc)
@@ -162,6 +153,3 @@ if __name__ == "__main__":
     results['accuracy_history'] = accuracy_history
 
     save_model_incrementally(best_model,sampled_epochs,losses_train,losses_dev,accuracy_history,results)
-
-
-
