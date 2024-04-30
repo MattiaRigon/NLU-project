@@ -127,11 +127,11 @@ def collate_fn(data,bert_tokenizer):
         new_item[key] = [d[key] for d in data]
 
     src_utt = bert_tokenizer(new_item['utterance'],return_tensors="pt", padding=True) 
-    y_slots = bert_tokenizer(new_item['slots'])['input_ids']
-    intent = torch.LongTensor(new_item["intent"])
+    y_slots = bert_tokenizer(new_item['slots'],return_tensors="pt", padding=True)['input_ids']
+    intent = bert_tokenizer(new_item['intent'],return_tensors="pt", padding=True)['input_ids']
     y_lengths = [len(seq) for seq in new_item['slots']]
 
-    src_utt = src_utt.to(device) # We load the Tensor on our selected device
+    src_utt = {key: value.to(device) for key, value in src_utt.items()} # We load the Tensor on our selected device
     y_slots = y_slots.to(device)
     intent = intent.to(device)
     y_lengths = torch.LongTensor(y_lengths).to(device)

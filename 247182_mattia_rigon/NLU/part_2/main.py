@@ -73,7 +73,8 @@ if __name__ == "__main__":
     out_int = len(lang.intent2id)
     vocab_len = len(lang.word2id)
 
-    model = JointIntentSlotsBert(out_slot=128, out_int=22, dropout=0.1)
+    model = JointIntentSlotsBert(out_slot=out_slot, out_int=out_int, dropout=0.1)
+    model.to(device)
     model.apply(init_weights)
 
     optimizer = optim.Adam(model.parameters(), lr=lr)
@@ -117,7 +118,7 @@ if __name__ == "__main__":
     print('Slot F1: ',f1_result)
     print('Intent Accuracy:', intent_result)
 
-    configurations = f'LR = {lr}\nhid_size = {hid_size}\nemb_size={emb_size}\noptimizer={str(type(optimizer))}\nmodel={str(type(model))}\n'
-    results_txt = f'{configurations}Intent Accuracy:  {intent_result}\nSlot F1: {f1_result}\nEpochs: {sampled_epochs[-1]}/{n_epochs} ' 
+    # configurations = f'LR = {lr}\nhid_size = {hid_size}\nemb_size={emb_size}\noptimizer={str(type(optimizer))}\nmodel={str(type(model))}\n'
+    # results_txt = f'{configurations}Intent Accuracy:  {intent_result}\nSlot F1: {f1_result}\nEpochs: {sampled_epochs[-1]}/{n_epochs} ' 
 
-    save_model_incrementally(best_model,sampled_epochs,losses_train,losses_dev,accuracy_history,results_txt)
+    # save_model_incrementally(best_model,sampled_epochs,losses_train,losses_dev,accuracy_history,results_txt)
