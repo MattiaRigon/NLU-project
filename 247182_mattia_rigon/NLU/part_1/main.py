@@ -26,7 +26,7 @@ if __name__ == "__main__":
     portion = 0.10
 
     intents = [x['intent'] for x in tmp_train_raw] # We stratify on intents
-    count_y = Counter(intents)
+    count_y = Counter(intents) # like a dict with intent:frequency
 
     labels = []
     inputs = []

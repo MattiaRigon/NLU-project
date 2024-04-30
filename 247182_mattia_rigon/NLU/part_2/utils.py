@@ -88,6 +88,32 @@ class IntentsAndSlots (data.Dataset):
                     tmp_seq.append(mapper[self.unk])
             res.append(tmp_seq)
         return res
+    
+class IntentAndSlotsBert(data.Dataset):
+    def __init__(self,bert_tokenizer ,dataset, unk='unk'):
+        self.bert_tokenizer = bert_tokenizer
+        self.tokenized = []
+        self.utterances = []
+        self.intents = []
+        self.slots = []
+        self.unk = unk
+
+        for x in dataset:
+            self.tokenized.append(self.bert_tokenizer(x["utterance"]))
+            self.utterances.append(x['utterance'])
+            self.slots.append(x['slots'])
+            self.intents.append(x['intent'])
+
+    def __len__(self):
+        return len(self.utterances)
+
+    def __getitem__(self, idx):
+        utt = torch.Tensor(self.bert_tokenizer.convert_ids_to_token[idx])
+        slots = torch.Tensor(self.bert_tokenizer.convert_ids_to_token[idx])
+        intent = self.bert_tokenizer.convert_ids_to_token[idx]
+        sample = {'utterance': utt, 'slots': slots, 'intent': intent}
+        return sample
+
 
 def collate_fn(data,bert_tokenizer):
 
@@ -95,17 +121,24 @@ def collate_fn(data,bert_tokenizer):
     # qui viene applciato il bert tokenizer 
     # problema che rimane è che abbiamo label come word ma tokens come subword
 
-    for sample in data:
-        tokenized = bert_tokenizer(sample['utterance'], return_tensors='pt')
+    new_item = {}  
 
-    # src_utt = src_utt.to(device) # We load the Tensor on our selected device
-    # y_slots = y_slots.to(device)
-    # intent = intent.to(device)
-    # y_lengths = torch.LongTensor(y_lengths).to(device)
-    
-    # new_item["utterances"] = src_utt
-    # new_item["intents"] = intent
-    # new_item["y_slots"] = y_slots
-    # new_item["slots_len"] = y_lengths
+    for key in data[0].keys():
+        new_item[key] = [d[key] for d in data]
 
-    return tokenized
+    src_utt = bert_tokenizer(new_item['utterance'],return_tensors="pt", padding=True) 
+    y_slots = bert_tokenizer(new_item['slots'])['input_ids']
+    intent = torch.LongTensor(new_item["intent"])
+    y_lengths = [len(seq) for seq in new_item['slots']]
+
+    src_utt = src_utt.to(device) # We load the Tensor on our selected device
+    y_slots = y_slots.to(device)
+    intent = intent.to(device)
+    y_lengths = torch.LongTensor(y_lengths).to(device)
+
+    new_item["utterances"] = src_utt # input in model
+    new_item["intents"] = intent
+    new_item["y_slots"] = y_slots 
+    new_item["slots_len"] = y_lengths # input in model
+
+    return new_item

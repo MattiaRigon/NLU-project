@@ -1,7 +1,7 @@
 import torch.nn as nn
 from transformers import BertTokenizer, BertModel
 
-class JointIntentSlotsBert(nn.module):
+class JointIntentSlotsBert(nn.Module):
 
     def __init__(self,out_slot,out_int,dropout=0.1,):
 
