@@ -90,7 +90,7 @@ if __name__ == "__main__":
     best_model = None
     for x in tqdm(range(1,n_epochs)):
         loss = train_loop(train_loader, optimizer, criterion_slots, 
-                        criterion_intents, model, clip=clip)
+                        criterion_intents, model, clip=clip, num_intent_labels=out_int, num_slot_labels=out_slot)
         if x % 5 == 0: # We check the performance every 5 epochs
             sampled_epochs.append(x)
             losses_train.append(np.asarray(loss).mean())

@@ -10,16 +10,53 @@ import torch.nn as nn
 import torch
 import json
 
+PAD_TOKEN = 0
 
-def train_loop(data, optimizer, criterion_slots, criterion_intents, model, clip=5):
+def post_process_model(intent_logits,slot_logits,intent_label_ids, slot_labels_ids,attention_mask,num_intent_labels,num_slot_labels,ignore_index):
+    slot_loss_coef = 1
+    total_loss = 0
+    # 1. Intent Softmax
+    if intent_label_ids is not None:
+        if num_intent_labels == 1:
+            intent_loss_fct = nn.MSELoss()
+            intent_loss = intent_loss_fct(intent_logits.view(-1), intent_label_ids.view(-1))
+        else:
+            intent_loss_fct = nn.CrossEntropyLoss()
+            intent_loss = intent_loss_fct(intent_logits.view(-1, num_intent_labels), intent_label_ids.view(-1))
+        total_loss += intent_loss
+
+    # 2. Slot Softmax
+    if slot_labels_ids is not None:
+
+        slot_loss_fct = nn.CrossEntropyLoss(ignore_index=ignore_index)
+        # Only keep active parts of the loss
+        if attention_mask is not None:
+            active_loss = attention_mask.view(-1) == 1
+            active_logits = slot_logits.view(-1, num_slot_labels)[active_loss]
+            active_labels = slot_labels_ids.view(-1)[active_loss]
+            slot_loss = slot_loss_fct(active_logits, active_labels)
+        else:
+            slot_loss = slot_loss_fct(slot_logits.view(-1, num_slot_labels), slot_labels_ids.view(-1))
+        total_loss += slot_loss_coef * slot_loss
+
+    outputs = ((intent_logits, slot_logits),) + outputs[2:]  # add hidden states and attention if they are here
+
+    outputs = (total_loss,) + outputs
+
+
+
+def train_loop(data, optimizer, criterion_slots, criterion_intents, model ,num_intent_labels, num_slot_labels,clip=5):
     model.train()
     loss_array = []
     for sample in data:
         optimizer.zero_grad() # Zeroing the gradient
         slots, intent = model(sample['utterances'], sample['slots_len'])
-        loss_intent = criterion_intents(intent, sample['intents'])
-        loss_slot = criterion_slots(slots, sample['y_slots'])
-        loss = loss_intent + loss_slot # In joint training we sum the losses. 
+        # Compute the loss and softmax
+        loss , outputs = post_process_model(intent,slots,sample['intents'],sample['y_slots'],sample['attention_mask'],num_intent_labels,num_slot_labels,PAD_TOKEN)
+
+        # loss_intent = criterion_intents(intent, sample['intents'])
+        # loss_slot = criterion_slots(slots, sample['y_slots'])
+        # loss = loss_intent + loss_slot # In joint training we sum the losses. 
                                        # Is there another way to do that?
         loss_array.append(loss.item())
         loss.backward() # Compute the gradient, deleting the computational graph
