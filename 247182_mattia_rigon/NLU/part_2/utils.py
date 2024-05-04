@@ -115,7 +115,11 @@ class IntentAndSlotsBert(data.Dataset):
         return sample
 
 
-def collate_fn(data,bert_tokenizer):
+def collate_fn(data,bert_tokenizer,lang : Lang):
+
+
+    # PROBABILEMNTE SBAGLIATO METTO LE LABEL DEGLI SLOT PARTENDO DA 0,0 , QUINDI TIPO
+    # QUANDO VALUTO SE PRENDO IL PRIMO DELL'OUTPUT POTREBB ESSERE CHE CI SIANO TOKEN CLS O COSE COSI
 
     # data : utteance plain 
     # qui viene applciato il bert tokenizer 
@@ -127,9 +131,34 @@ def collate_fn(data,bert_tokenizer):
         new_item[key] = [d[key] for d in data]
 
     src_utt = bert_tokenizer(new_item['utterance'],return_tensors="pt", padding=True) 
-    y_slots = bert_tokenizer(new_item['slots'],return_tensors="pt", padding=True)['input_ids']
-    intent = bert_tokenizer(new_item['intent'],return_tensors="pt", padding=True)['input_ids']
-    y_lengths = [len(seq) for seq in new_item['slots']]
+
+    # L'IDEA POTREBBE ESSERE QUELLA DI PRENDERE LA POSIZIONE NELLA MATRICE DELLE SLOTS E DARE LA STESSA LABEL ANCHE AL SUBTOKEN DOPO, IN MODO DA
+    # AVERE GLI SLOTS CHE HANNO LE STESSE DIMENSIONI DEI SUBTOKEN NELL'UTTERANCE 
+
+    y_lengths = [len(seq) for seq in src_utt['input_ids']]
+    max_len = max(y_lengths)
+    slots_id = torch.LongTensor(len(src_utt['input_ids']),max_len).fill_(PAD_TOKEN)
+
+    for i,sent in enumerate(new_item["slots"]):
+        # slots_id.append([])
+        for j,slot in enumerate(sent.split()):
+            slots_id[i][j] = lang.slot2id[slot]
+            # tmp = bert_tokenizer([slot],return_tensors="pt")
+            # tokens = [bert_tokenizer.convert_ids_to_tokens(token) for token in tmp["input_ids"]]
+            # print(tokens)
+
+    # for seq in src_utt['input_ids']:
+    #     tokens = bert_tokenizer.convert_ids_to_tokens(seq)
+        # print(tokens)
+        # slots_id[i:max_len]
+
+    # slots_id =  [lang.slot2id[i] for i in sent for sent in new_item["slots"]]
+    y_slots = torch.LongTensor(slots_id)#bert_tokenizer(new_item['slots'],return_tensors="pt", padding=True)['input_ids']
+    
+    # y_slots, y_lengths = merge(new_item["slots"])
+    intents_id = [lang.intent2id[i] for i in new_item["intent"]]
+    intent = torch.LongTensor(intents_id) #bert_tokenizer(new_item['intent'],return_tensors="pt", padding=True)['input_ids']
+    
 
     src_utt = {key: value.to(device) for key, value in src_utt.items()} # We load the Tensor on our selected device
     y_slots = y_slots.to(device)

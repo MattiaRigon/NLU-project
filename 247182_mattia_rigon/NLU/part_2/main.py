@@ -58,15 +58,15 @@ if __name__ == "__main__":
 
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
-    train_loader = DataLoader(train_raw, batch_size=128, collate_fn=lambda x: collate_fn(x, tokenizer), shuffle=True)
-    dev_loader = DataLoader(dev_raw, batch_size=64, collate_fn=lambda x: collate_fn(x, tokenizer))
-    test_loader = DataLoader(test_raw, batch_size=64, collate_fn=lambda x: collate_fn(x, tokenizer))
+    train_loader = DataLoader(train_raw, batch_size=128, collate_fn=lambda x: collate_fn(x, tokenizer,lang), shuffle=True)
+    dev_loader = DataLoader(dev_raw, batch_size=64, collate_fn=lambda x: collate_fn(x, tokenizer,lang))
+    test_loader = DataLoader(test_raw, batch_size=64, collate_fn=lambda x: collate_fn(x, tokenizer,lang))
 
     
     hid_size = 350
     emb_size = 350
 
-    lr = 0.0001 # learning rate
+    lr = 0.00005 # learning rate
     clip = 5 # Clip the gradient
 
     out_slot = len(lang.slot2id)
@@ -80,22 +80,22 @@ if __name__ == "__main__":
     optimizer = optim.Adam(model.parameters(), lr=lr)
     criterion_slots = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN)
     criterion_intents = nn.CrossEntropyLoss() # Because we do not have the pad token
-    n_epochs = 200
+    n_epochs = 3
     patience = 3
     losses_train = []
     losses_dev = []
     sampled_epochs = []
     accuracy_history = []
-    best_f1 = 0
+    best_f1 = -1
     best_model = None
     for x in tqdm(range(1,n_epochs)):
         loss = train_loop(train_loader, optimizer, criterion_slots, 
                         criterion_intents, model, clip=clip, num_intent_labels=out_int, num_slot_labels=out_slot)
-        if x % 5 == 0: # We check the performance every 5 epochs
+        if x % 1 == 0: # We check the performance every 5 epochs
             sampled_epochs.append(x)
             losses_train.append(np.asarray(loss).mean())
             results_dev, intent_res, loss_dev = eval_loop(dev_loader, criterion_slots, 
-                                                        criterion_intents, model, lang)
+                                                        criterion_intents, model, lang,num_intent_labels=out_int, num_slot_labels=out_slot)
             accuracy_history.append(intent_res['accuracy'])
             losses_dev.append(np.asarray(loss_dev).mean())
             
@@ -112,7 +112,7 @@ if __name__ == "__main__":
 
     best_model.to(device)
     results_test, intent_test, _ = eval_loop(test_loader, criterion_slots, 
-                                            criterion_intents, best_model, lang)   
+                                            criterion_intents, best_model, lang,num_intent_labels=out_int, num_slot_labels=out_slot)   
     f1_result =   results_test['total']['f']
     intent_result = intent_test['accuracy']
     print('Slot F1: ',f1_result)

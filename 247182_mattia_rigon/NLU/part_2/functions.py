@@ -12,7 +12,7 @@ import json
 
 PAD_TOKEN = 0
 
-def post_process_model(intent_logits,slot_logits,intent_label_ids, slot_labels_ids,attention_mask,num_intent_labels,num_slot_labels,ignore_index):
+def post_process_model(intent_logits,slot_logits,intent_label_ids, slot_labels_ids,attention_mask,num_intent_labels,num_slot_labels,ignore_index,outputs):
     slot_loss_coef = 1
     total_loss = 0
     # 1. Intent Softmax
@@ -41,7 +41,9 @@ def post_process_model(intent_logits,slot_logits,intent_label_ids, slot_labels_i
 
     outputs = ((intent_logits, slot_logits),) + outputs[2:]  # add hidden states and attention if they are here
 
-    outputs = (total_loss,) + outputs
+    # outputs = (total_loss,) + outputs
+
+    return total_loss, outputs
 
 
 
@@ -50,10 +52,9 @@ def train_loop(data, optimizer, criterion_slots, criterion_intents, model ,num_i
     loss_array = []
     for sample in data:
         optimizer.zero_grad() # Zeroing the gradient
-        slots, intent = model(sample['utterances'], sample['slots_len'])
+        slots, intents, bert_output = model(sample['utterances'], sample['slots_len'])
         # Compute the loss and softmax
-        loss , outputs = post_process_model(intent,slots,sample['intents'],sample['y_slots'],sample['attention_mask'],num_intent_labels,num_slot_labels,PAD_TOKEN)
-
+        loss, outputs = post_process_model(intents,slots,sample['intents'],sample['y_slots'],sample['utterances']['attention_mask'],num_intent_labels,num_slot_labels,PAD_TOKEN,bert_output)
         # loss_intent = criterion_intents(intent, sample['intents'])
         # loss_slot = criterion_slots(slots, sample['y_slots'])
         # loss = loss_intent + loss_slot # In joint training we sum the losses. 
@@ -65,7 +66,7 @@ def train_loop(data, optimizer, criterion_slots, criterion_intents, model ,num_i
         optimizer.step() # Update the weights
     return loss_array
 
-def eval_loop(data, criterion_slots, criterion_intents, model, lang):
+def eval_loop(data, criterion_slots, criterion_intents, model, lang,num_intent_labels, num_slot_labels):
     model.eval()
     loss_array = []
     
@@ -77,10 +78,13 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang):
     #softmax = nn.Softmax(dim=1) # Use Softmax if you need the actual probability
     with torch.no_grad(): # It used to avoid the creation of computational graph
         for sample in data:
-            slots, intents = model(sample['utterances'], sample['slots_len'])
-            loss_intent = criterion_intents(intents, sample['intents'])
-            loss_slot = criterion_slots(slots, sample['y_slots'])
-            loss = loss_intent + loss_slot 
+            slots, intents, bert_output = model(sample['utterances'], sample['slots_len'])
+
+            loss, outputs = post_process_model(intents,slots,sample['intents'],sample['y_slots'],sample['utterances']['attention_mask'],num_intent_labels,num_slot_labels,PAD_TOKEN,bert_output)
+
+            # loss_intent = criterion_intents(intents, sample['intents'])
+            # loss_slot = criterion_slots(slots, sample['y_slots'])
+            # loss = loss_intent + loss_slot 
             loss_array.append(loss.item())
             # Intent inference
             # Get the highest probable class
@@ -93,11 +97,12 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang):
             # Slot inference 
             output_slots = torch.argmax(slots, dim=1)
             for id_seq, seq in enumerate(output_slots):
-                length = sample['slots_len'].tolist()[id_seq]
-                utt_ids = sample['utterance'][id_seq][:length].tolist()
-                gt_ids = sample['y_slots'][id_seq].tolist()
-                gt_slots = [lang.id2slot[elem] for elem in gt_ids[:length]]
-                utterance = [lang.id2word[elem] for elem in utt_ids]
+                # length = sample['slots_len'].tolist()[id_seq]
+                # utt_ids = sample['utterance'][id_seq][:length].split(" ")
+                # gt_ids = sample['y_slots'][id_seq].tolist()
+                gt_slots = sample['slots'][id_seq].split(" ")
+                utterance = sample['utterance'][id_seq].split(" ")
+                length = len(utterance)
                 to_decode = seq[:length].tolist()
                 ref_slots.append([(utterance[id_el], elem) for id_el, elem in enumerate(gt_slots)])
                 tmp_seq = []

@@ -40,6 +40,6 @@ class JointIntentSlotsBert(nn.Module):
         ## SOFTMAX ? 
         
 
-        return slot_output, intent_output
+        return slot_output, intent_output , bert_output
 
         
