@@ -137,7 +137,7 @@ def collate_fn(data,bert_tokenizer,lang : Lang):
 
     y_lengths = [len(seq) for seq in src_utt['input_ids']]
     max_len = max(y_lengths)
-    slots_id = torch.LongTensor(len(src_utt['input_ids']),max_len).fill_(PAD_TOKEN)
+    slots_id = torch.LongTensor(len(src_utt['input_ids']),max_len).fill_(lang.slot2id['O'])
 
     for i,sent in enumerate(new_item["slots"]):
         # slots_id.append([])
@@ -147,13 +147,29 @@ def collate_fn(data,bert_tokenizer,lang : Lang):
             # tokens = [bert_tokenizer.convert_ids_to_tokens(token) for token in tmp["input_ids"]]
             # print(tokens)
 
-    # for seq in src_utt['input_ids']:
-    #     tokens = bert_tokenizer.convert_ids_to_tokens(seq)
-        # print(tokens)
-        # slots_id[i:max_len]
+    final_slots_id = torch.LongTensor(len(src_utt['input_ids']),max_len).fill_(lang.slot2id['O'])
+
+    h = 0
+    i = 0
+    for seq in src_utt['input_ids']:
+        j = 0
+        k = 0
+        tokens = bert_tokenizer.convert_ids_to_tokens(seq)
+        for token in tokens:
+            if token in ['[CLS]','[SEP]']:
+                continue
+            if '##' in token:
+                final_slots_id[i][j] = PAD_TOKEN#slots_id[h][k-1]
+            else:
+                final_slots_id[i][j] =  slots_id[h][k]
+                k+=1
+            j += 1
+        h += 1
+        i += 1
+
 
     # slots_id =  [lang.slot2id[i] for i in sent for sent in new_item["slots"]]
-    y_slots = torch.LongTensor(slots_id)#bert_tokenizer(new_item['slots'],return_tensors="pt", padding=True)['input_ids']
+    y_slots = torch.LongTensor(final_slots_id)#bert_tokenizer(new_item['slots'],return_tensors="pt", padding=True)['input_ids']
     
     # y_slots, y_lengths = merge(new_item["slots"])
     intents_id = [lang.intent2id[i] for i in new_item["intent"]]

@@ -80,7 +80,7 @@ if __name__ == "__main__":
     optimizer = optim.Adam(model.parameters(), lr=lr)
     criterion_slots = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN)
     criterion_intents = nn.CrossEntropyLoss() # Because we do not have the pad token
-    n_epochs = 3
+    n_epochs = 20
     patience = 3
     losses_train = []
     losses_dev = []

@@ -19,27 +19,27 @@ class JointIntentSlotsBert(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
 
-    def forward(self,utterances,seq_lengths):
+    def forward(self,inputs,seq_lengths):
 
 
 
-        bert_output = self.bert_model(input_ids=utterances['input_ids'],attention_mask=utterances['attention_mask'])
+        bert_output = self.bert_model(**inputs)
 
         # Estrai gli embeddings dall'ultimo layer di BERT
-        bert_embeddings = bert_output.last_hidden_state
+        #bert_embeddings = bert_output.last_hidden_state
 
         # slot_output = self.slot_out(bert_embeddings[:, 0, :])  # Assuming you're using the CLS token for classification
         # intent_output = self.intent_out(bert_embeddings[:, 0, :])  # Assuming you're using the CLS token for classification
 
-        pooled_output = bert_output[1]  # [CLS]
-        sequence_output = bert_output[0]
+        intent_output = bert_output.last_hidden_state[:,0,:]#bert_output[1]  # [CLS]
+        sequence_output = bert_output.last_hidden_state   #[0]
 
-        intent_output = self.intent_out(pooled_output)
+        intent_output = self.intent_out(intent_output)
         slot_output = self.slot_out(sequence_output)
 
         ## SOFTMAX ? 
-        
+        slot_output = slot_output.permute(0,2,1)
 
-        return slot_output, intent_output , bert_output
+        return slot_output, intent_output 
 
         

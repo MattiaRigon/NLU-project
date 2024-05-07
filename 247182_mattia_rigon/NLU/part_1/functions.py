@@ -53,8 +53,11 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang):
             ref_intents.extend(gt_intents)
             hyp_intents.extend(out_intents)
             
+
+            # Slot = [ batch, num_classi_slot, seq_len ]
+
             # Slot inference 
-            output_slots = torch.argmax(slots, dim=1)
+            output_slots = torch.argmax(slots, dim=1) # prendo la classe con piu prob per ogni seq ?
             for id_seq, seq in enumerate(output_slots):
                 length = sample['slots_len'].tolist()[id_seq]
                 utt_ids = sample['utterance'][id_seq][:length].tolist()

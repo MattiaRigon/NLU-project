@@ -10,6 +10,8 @@ import torch.nn as nn
 import torch
 import json
 
+from utils import Lang
+
 PAD_TOKEN = 0
 
 def post_process_model(intent_logits,slot_logits,intent_label_ids, slot_labels_ids,attention_mask,num_intent_labels,num_slot_labels,ignore_index,outputs):
@@ -52,12 +54,12 @@ def train_loop(data, optimizer, criterion_slots, criterion_intents, model ,num_i
     loss_array = []
     for sample in data:
         optimizer.zero_grad() # Zeroing the gradient
-        slots, intents, bert_output = model(sample['utterances'], sample['slots_len'])
+        slots, intents = model(sample['utterances'], sample['slots_len'])
         # Compute the loss and softmax
-        loss, outputs = post_process_model(intents,slots,sample['intents'],sample['y_slots'],sample['utterances']['attention_mask'],num_intent_labels,num_slot_labels,PAD_TOKEN,bert_output)
-        # loss_intent = criterion_intents(intent, sample['intents'])
-        # loss_slot = criterion_slots(slots, sample['y_slots'])
-        # loss = loss_intent + loss_slot # In joint training we sum the losses. 
+        # loss, outputs = post_process_model(intents,slots,sample['intents'],sample['y_slots'],sample['utterances']['attention_mask'],num_intent_labels,num_slot_labels,PAD_TOKEN,bert_output)
+        loss_intent = criterion_intents(intents, sample['intents'])
+        loss_slot = criterion_slots(slots, sample['y_slots'])
+        loss = loss_intent + loss_slot # In joint training we sum the losses. 
                                        # Is there another way to do that?
         loss_array.append(loss.item())
         loss.backward() # Compute the gradient, deleting the computational graph
@@ -66,7 +68,7 @@ def train_loop(data, optimizer, criterion_slots, criterion_intents, model ,num_i
         optimizer.step() # Update the weights
     return loss_array
 
-def eval_loop(data, criterion_slots, criterion_intents, model, lang,num_intent_labels, num_slot_labels):
+def eval_loop(data, criterion_slots, criterion_intents, model, lang : Lang,num_intent_labels, num_slot_labels):
     model.eval()
     loss_array = []
     
@@ -78,13 +80,13 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang,num_intent_l
     #softmax = nn.Softmax(dim=1) # Use Softmax if you need the actual probability
     with torch.no_grad(): # It used to avoid the creation of computational graph
         for sample in data:
-            slots, intents, bert_output = model(sample['utterances'], sample['slots_len'])
+            slots, intents = model(sample['utterances'], sample['slots_len'])
 
-            loss, outputs = post_process_model(intents,slots,sample['intents'],sample['y_slots'],sample['utterances']['attention_mask'],num_intent_labels,num_slot_labels,PAD_TOKEN,bert_output)
+            # loss, outputs = post_process_model(intents,slots,sample['intents'],sample['y_slots'],sample['utterances']['attention_mask'],num_intent_labels,num_slot_labels,PAD_TOKEN,bert_output)
 
-            # loss_intent = criterion_intents(intents, sample['intents'])
-            # loss_slot = criterion_slots(slots, sample['y_slots'])
-            # loss = loss_intent + loss_slot 
+            loss_intent = criterion_intents(intents, sample['intents'])
+            loss_slot = criterion_slots(slots, sample['y_slots'])
+            loss = loss_intent + loss_slot 
             loss_array.append(loss.item())
             # Intent inference
             # Get the highest probable class
@@ -102,12 +104,15 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang,num_intent_l
                 # gt_ids = sample['y_slots'][id_seq].tolist()
                 gt_slots = sample['slots'][id_seq].split(" ")
                 utterance = sample['utterance'][id_seq].split(" ")
-                length = len(utterance)
+                length =  len(utterance)# torch.sum(sample['utterances']['attention_mask'][0] == 1).item() - 2 
                 to_decode = seq[:length].tolist()
                 ref_slots.append([(utterance[id_el], elem) for id_el, elem in enumerate(gt_slots)])
                 tmp_seq = []
                 for id_el, elem in enumerate(to_decode):
-                    tmp_seq.append((utterance[id_el], lang.id2slot[elem]))
+                    if  lang.id2slot[elem] == 'pad':
+                        tmp_seq.append((utterance[id_el], 'O'))
+                    else:
+                        tmp_seq.append((utterance[id_el], lang.id2slot[elem]))
                 hyp_slots.append(tmp_seq)
     try:            
         results = evaluate(ref_slots, hyp_slots)
