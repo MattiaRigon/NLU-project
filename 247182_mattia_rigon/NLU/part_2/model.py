@@ -19,7 +19,7 @@ class JointIntentSlotsBert(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
 
-    def forward(self,inputs,seq_lengths):
+    def forward(self,inputs):
 
 
 

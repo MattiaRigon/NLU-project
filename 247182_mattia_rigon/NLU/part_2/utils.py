@@ -140,17 +140,14 @@ def collate_fn(data,bert_tokenizer,lang : Lang):
     slots_id = torch.LongTensor(len(src_utt['input_ids']),max_len).fill_(lang.slot2id['O'])
 
     for i,sent in enumerate(new_item["slots"]):
-        # slots_id.append([])
         for j,slot in enumerate(sent.split()):
             slots_id[i][j] = lang.slot2id[slot]
-            # tmp = bert_tokenizer([slot],return_tensors="pt")
-            # tokens = [bert_tokenizer.convert_ids_to_tokens(token) for token in tmp["input_ids"]]
-            # print(tokens)
 
     final_slots_id = torch.LongTensor(len(src_utt['input_ids']),max_len).fill_(lang.slot2id['O'])
 
     h = 0
     i = 0
+    
     for seq in src_utt['input_ids']:
         j = 0
         k = 0

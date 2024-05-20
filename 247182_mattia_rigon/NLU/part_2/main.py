@@ -90,12 +90,12 @@ if __name__ == "__main__":
     best_model = None
     for x in tqdm(range(1,n_epochs)):
         loss = train_loop(train_loader, optimizer, criterion_slots, 
-                        criterion_intents, model, clip=clip, num_intent_labels=out_int, num_slot_labels=out_slot)
+                        criterion_intents, model, clip=clip)
         if x % 1 == 0: # We check the performance every 5 epochs
             sampled_epochs.append(x)
             losses_train.append(np.asarray(loss).mean())
             results_dev, intent_res, loss_dev = eval_loop(dev_loader, criterion_slots, 
-                                                        criterion_intents, model, lang,num_intent_labels=out_int, num_slot_labels=out_slot)
+                                                        criterion_intents, model, lang,tokenizer)
             accuracy_history.append(intent_res['accuracy'])
             losses_dev.append(np.asarray(loss_dev).mean())
             
@@ -112,7 +112,7 @@ if __name__ == "__main__":
 
     best_model.to(device)
     results_test, intent_test, _ = eval_loop(test_loader, criterion_slots, 
-                                            criterion_intents, best_model, lang,num_intent_labels=out_int, num_slot_labels=out_slot)   
+                                            criterion_intents, best_model, lang,tokenizer)   
     f1_result =   results_test['total']['f']
     intent_result = intent_test['accuracy']
     print('Slot F1: ',f1_result)

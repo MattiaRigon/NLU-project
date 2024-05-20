@@ -49,12 +49,12 @@ def post_process_model(intent_logits,slot_logits,intent_label_ids, slot_labels_i
 
 
 
-def train_loop(data, optimizer, criterion_slots, criterion_intents, model ,num_intent_labels, num_slot_labels,clip=5):
+def train_loop(data, optimizer, criterion_slots, criterion_intents, model ,clip=5):
     model.train()
     loss_array = []
     for sample in data:
         optimizer.zero_grad() # Zeroing the gradient
-        slots, intents = model(sample['utterances'], sample['slots_len'])
+        slots, intents = model(sample['utterances'])
         # Compute the loss and softmax
         # loss, outputs = post_process_model(intents,slots,sample['intents'],sample['y_slots'],sample['utterances']['attention_mask'],num_intent_labels,num_slot_labels,PAD_TOKEN,bert_output)
         loss_intent = criterion_intents(intents, sample['intents'])
@@ -68,7 +68,7 @@ def train_loop(data, optimizer, criterion_slots, criterion_intents, model ,num_i
         optimizer.step() # Update the weights
     return loss_array
 
-def eval_loop(data, criterion_slots, criterion_intents, model, lang : Lang,num_intent_labels, num_slot_labels):
+def eval_loop(data, criterion_slots, criterion_intents, model, lang : Lang, bert_tokenizer):
     model.eval()
     loss_array = []
     
@@ -80,7 +80,7 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang : Lang,num_i
     #softmax = nn.Softmax(dim=1) # Use Softmax if you need the actual probability
     with torch.no_grad(): # It used to avoid the creation of computational graph
         for sample in data:
-            slots, intents = model(sample['utterances'], sample['slots_len'])
+            slots, intents = model(sample['utterances'])
 
             # loss, outputs = post_process_model(intents,slots,sample['intents'],sample['y_slots'],sample['utterances']['attention_mask'],num_intent_labels,num_slot_labels,PAD_TOKEN,bert_output)
 
@@ -101,18 +101,19 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang : Lang,num_i
             for id_seq, seq in enumerate(output_slots):
                 # length = sample['slots_len'].tolist()[id_seq]
                 # utt_ids = sample['utterance'][id_seq][:length].split(" ")
-                # gt_ids = sample['y_slots'][id_seq].tolist()
-                gt_slots = sample['slots'][id_seq].split(" ")
-                utterance = sample['utterance'][id_seq].split(" ")
+
+                utterance = bert_tokenizer.convert_ids_to_tokens(sample['utterances']['input_ids'][id_seq])
+                utterance = [u for u in utterance if u not in ['[CLS]','[SEP]','[PAD]']]
                 length =  len(utterance)# torch.sum(sample['utterances']['attention_mask'][0] == 1).item() - 2 
+                
+                gt_ids = sample['y_slots'][id_seq].tolist()
+                gt_slots = [lang.id2slot[elem] for elem in gt_ids[:length]]
+                            
                 to_decode = seq[:length].tolist()
-                ref_slots.append([(utterance[id_el], elem) for id_el, elem in enumerate(gt_slots)])
+                ref_slots.append([(utterance[id_el], gt_slots[id_el]) for id_el, elem in enumerate(utterance)])
                 tmp_seq = []
                 for id_el, elem in enumerate(to_decode):
-                    if  lang.id2slot[elem] == 'pad':
-                        tmp_seq.append((utterance[id_el], 'O'))
-                    else:
-                        tmp_seq.append((utterance[id_el], lang.id2slot[elem]))
+                    tmp_seq.append((utterance[id_el], lang.id2slot[elem]))
                 hyp_slots.append(tmp_seq)
     try:            
         results = evaluate(ref_slots, hyp_slots)
