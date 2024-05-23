@@ -56,7 +56,6 @@ def train_loop(data, optimizer, criterion_slots, criterion_intents, model ,clip=
         optimizer.zero_grad() # Zeroing the gradient
         slots, intents = model(sample['utterances'])
         # Compute the loss and softmax
-        # loss, outputs = post_process_model(intents,slots,sample['intents'],sample['y_slots'],sample['utterances']['attention_mask'],num_intent_labels,num_slot_labels,PAD_TOKEN,bert_output)
         loss_intent = criterion_intents(intents, sample['intents'])
         loss_slot = criterion_slots(slots, sample['y_slots'])
         loss = loss_intent + loss_slot # In joint training we sum the losses. 
@@ -81,9 +80,7 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang : Lang, bert
     with torch.no_grad(): # It used to avoid the creation of computational graph
         for sample in data:
             slots, intents = model(sample['utterances'])
-
-            # loss, outputs = post_process_model(intents,slots,sample['intents'],sample['y_slots'],sample['utterances']['attention_mask'],num_intent_labels,num_slot_labels,PAD_TOKEN,bert_output)
-
+            
             loss_intent = criterion_intents(intents, sample['intents'])
             loss_slot = criterion_slots(slots, sample['y_slots'])
             loss = loss_intent + loss_slot 

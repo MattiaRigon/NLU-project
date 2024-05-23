@@ -147,16 +147,21 @@ def collate_fn(data,bert_tokenizer,lang : Lang):
 
     h = 0
     i = 0
-    
+    wasApostrophe = False
     for seq in src_utt['input_ids']:
         j = 0
         k = 0
         tokens = bert_tokenizer.convert_ids_to_tokens(seq)
         for token in tokens:
             if token in ['[CLS]','[SEP]']:
-                continue
-            if '##' in token:
+                continue # guarda se aggiungere pad
+            if '##' in token or wasApostrophe:
                 final_slots_id[i][j] = PAD_TOKEN#slots_id[h][k-1]
+                wasApostrophe = False
+            elif "'" in token:
+                final_slots_id[i][j] =  slots_id[h][k]
+                k+=1
+                wasApostrophe = True
             else:
                 final_slots_id[i][j] =  slots_id[h][k]
                 k+=1

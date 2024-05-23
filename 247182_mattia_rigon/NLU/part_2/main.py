@@ -9,7 +9,7 @@ from pprint import pprint
 from utils import PAD_TOKEN, IntentAndSlotsBert, collate_fn, load_data, Lang
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
-from transformers import BertTokenizer
+from transformers import BertTokenizer,BertConfig
 import torch.optim as optim
 from tqdm import tqdm
 from model import JointIntentSlotsBert
@@ -62,18 +62,14 @@ if __name__ == "__main__":
     dev_loader = DataLoader(dev_raw, batch_size=64, collate_fn=lambda x: collate_fn(x, tokenizer,lang))
     test_loader = DataLoader(test_raw, batch_size=64, collate_fn=lambda x: collate_fn(x, tokenizer,lang))
 
-    
-    hid_size = 350
-    emb_size = 350
-
     lr = 0.00005 # learning rate
     clip = 5 # Clip the gradient
 
     out_slot = len(lang.slot2id)
     out_int = len(lang.intent2id)
     vocab_len = len(lang.word2id)
-
-    model = JointIntentSlotsBert(out_slot=out_slot, out_int=out_int, dropout=0.1)
+    config = BertConfig.from_pretrained('bert-base-uncased')
+    model = JointIntentSlotsBert(config=config,out_slot=out_slot, out_int=out_int, dropout=0.1)
     model.to(device)
     model.apply(init_weights)
 
