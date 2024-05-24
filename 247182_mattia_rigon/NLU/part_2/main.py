@@ -6,7 +6,7 @@ from collections import Counter
 import os
 from functions import *
 from pprint import pprint
-from utils import PAD_TOKEN, IntentAndSlotsBert, collate_fn, load_data, Lang
+from utils import PAD_TOKEN,IntentsAndSlots, collate_fn, load_data, Lang
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
 from transformers import BertTokenizer,BertConfig
@@ -56,11 +56,15 @@ if __name__ == "__main__":
 
     lang = Lang(words, intents, slots, cutoff=0)
 
+    train_dataset = IntentsAndSlots(train_raw, lang)
+    dev_dataset = IntentsAndSlots(dev_raw, lang)
+    test_dataset = IntentsAndSlots(test_raw, lang)
+
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
-    train_loader = DataLoader(train_raw, batch_size=128, collate_fn=lambda x: collate_fn(x, tokenizer,lang), shuffle=True)
-    dev_loader = DataLoader(dev_raw, batch_size=64, collate_fn=lambda x: collate_fn(x, tokenizer,lang))
-    test_loader = DataLoader(test_raw, batch_size=64, collate_fn=lambda x: collate_fn(x, tokenizer,lang))
+    train_loader = DataLoader(train_dataset, batch_size=128, collate_fn=lambda x: collate_fn(x), shuffle=True)
+    dev_loader = DataLoader(dev_dataset, batch_size=64, collate_fn=lambda x: collate_fn(x))
+    test_loader = DataLoader(test_dataset, batch_size=64, collate_fn=lambda x: collate_fn(x))
 
     lr = 0.00005 # learning rate
     clip = 5 # Clip the gradient
@@ -76,7 +80,7 @@ if __name__ == "__main__":
     optimizer = optim.Adam(model.parameters(), lr=lr)
     criterion_slots = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN)
     criterion_intents = nn.CrossEntropyLoss() # Because we do not have the pad token
-    n_epochs = 20
+    n_epochs = 50
     patience = 3
     losses_train = []
     losses_dev = []
@@ -114,7 +118,7 @@ if __name__ == "__main__":
     print('Slot F1: ',f1_result)
     print('Intent Accuracy:', intent_result)
 
-    # configurations = f'LR = {lr}\nhid_size = {hid_size}\nemb_size={emb_size}\noptimizer={str(type(optimizer))}\nmodel={str(type(model))}\n'
-    # results_txt = f'{configurations}Intent Accuracy:  {intent_result}\nSlot F1: {f1_result}\nEpochs: {sampled_epochs[-1]}/{n_epochs} ' 
+    configurations = f'LR = {lr}\nhid_size = {config.hidden_size}\n\noptimizer={str(type(optimizer))}\nmodel={str(type(model))}\n'
+    results_txt = f'{configurations}Intent Accuracy:  {intent_result}\nSlot F1: {f1_result}\nEpochs: {sampled_epochs[-1]}/{n_epochs} ' 
 
-    # save_model_incrementally(best_model,sampled_epochs,losses_train,losses_dev,accuracy_history,results_txt)
+    save_model_incrementally(best_model,sampled_epochs,losses_train,losses_dev,accuracy_history,results_txt)
