@@ -56,9 +56,7 @@ def train_loop(data, optimizer, criterion_slots, criterion_intents, model ,clip=
         optimizer.zero_grad() # Zeroing the gradient
         slots, intents = model(sample['utterances'])
         # Compute the loss and softmax
-        loss_intent = criterion_intents(intents, sample['intents'])
-        loss_slot = criterion_slots(slots, sample['y_slots'])
-        loss = loss_intent + loss_slot # In joint training we sum the losses. 
+        loss = criterion_slots(slots, sample['y_slots'])
                                        # Is there another way to do that?
         loss_array.append(loss.item())
         loss.backward() # Compute the gradient, deleting the computational graph
@@ -79,29 +77,16 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang : Lang, bert
     #softmax = nn.Softmax(dim=1) # Use Softmax if you need the actual probability
     with torch.no_grad(): # It used to avoid the creation of computational graph
         for sample in data:
-            slots, intents = model(sample['utterances'])
+            slots = model(sample['utterances'])
             
-            loss_intent = criterion_intents(intents, sample['intents'])
-            loss_slot = criterion_slots(slots, sample['y_slots'])
-            loss = loss_intent + loss_slot 
+            loss = criterion_slots(slots, sample['y_slots'])
             loss_array.append(loss.item())
-            # Intent inference
-            # Get the highest probable class
-            out_intents = [lang.id2intent[x] 
-                           for x in torch.argmax(intents, dim=1).tolist()] 
-            gt_intents = [lang.id2intent[x] for x in sample['intents'].tolist()]
-            ref_intents.extend(gt_intents)
-            hyp_intents.extend(out_intents)
-            
+    
             # Slot inference 
             output_slots = torch.argmax(slots, dim=1)
             for id_seq, seq in enumerate(output_slots):
-                # length = sample['slots_len'].tolist()[id_seq]
-                # utt_ids = sample['utterance'][id_seq][:length].split(" ")
-
                 utterance = bert_tokenizer.convert_ids_to_tokens(sample['utterances']['input_ids'][id_seq])
-                # utterance = [u for u in utterance if u not in ['[CLS]','[SEP]','[PAD]']]
-                length =  len(utterance)# torch.sum(sample['utterances']['attention_mask'][0] == 1).item() - 2 
+                length =  len(utterance)
                 
                 gt_ids = sample['y_slots'][id_seq].tolist()
                 gt_slots = [lang.id2slot[elem] for elem in gt_ids[:length]]
@@ -113,7 +98,6 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang : Lang, bert
                 for i,item in  enumerate(gt_slots):
                     if item in not_accepted_values:
                         delete_indexes.append(i)
-
 
                 ref_slots.append([(utterance[id_el], gt_slots[id_el]) for id_el, elem in enumerate(utterance) if gt_slots[id_el] not in not_accepted_values ])
 
@@ -137,9 +121,7 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang : Lang, bert
         print(hyp_s.difference(ref_s))
         results = {"total":{"f":0}}
         
-    report_intent = classification_report(ref_intents, hyp_intents, 
-                                          zero_division=False, output_dict=True)
-    return results, report_intent, loss_array
+    return results, loss_array
 
 def init_weights(mat):
     for n, m in mat.named_modules():

@@ -18,42 +18,27 @@ def load_data(path):
     dataset = []
     with open(path, 'r') as f:
         for line in f:
-            sentence, slots_sentence = line.split("####")
+            _, slots_sentence = line.split("####")
             slots_and_words = slots_sentence.split()
             slots = []
+            sentence = []
             for s in slots_and_words:
-                _,slot = s.split("=")
+                word,slot = s.rsplit("=",1)
                 slots.append(slot)
+                sentence.append(word)
 
-            # Remove punctuation from the beginning of the sentence
-            first_word = sentence.split()[0]
-            punctuations = ['.', '?', '!', ';', ':', ',']
-            if first_word in punctuations:
-                sentence = sentence.split()[1:]
+            if len(sentence) != len(slots):
+                raise ValueError("Length of sentence and slots do not match")
+            dataset.append({'sentence': ' '.join(sentence), 'slots': ' '.join(slots)})
 
-            # Place the punctuation at the end of the slot
-            last_word = sentence.split()[-1]
-            end_punctuations = ['.', '?', '!', ';']
-            for p in end_punctuations:
-                if last_word.endswith(p):
-                    last_word = last_word[:-1]
-                    sentence = ' '.join(sentence.split()[:-1]) + ' ' + last_word + ' ' + p
-                    slots = slots[:-1] + [slots[-1],p]
-                    
-            dataset.append({'utterance': sentence, 'slots': ' '.join(slots)})
-
-
-    
     return dataset
 
 class Lang():
-    def __init__(self, words, intents, slots, cutoff=0):
+    def __init__(self, words, slots, cutoff=0):
         self.word2id = self.w2id(words, cutoff=cutoff, unk=True)
         self.slot2id = self.lab2id(slots)
-        self.intent2id = self.lab2id(intents, pad=False)
         self.id2word = {v:k for k, v in self.word2id.items()}
         self.id2slot = {v:k for k, v in self.slot2id.items()}
-        self.id2intent = {v:k for k, v in self.intent2id.items()}
         
     def w2id(self, elements, cutoff=None, unk=True):
         vocab = {'pad': PAD_TOKEN}
@@ -75,46 +60,37 @@ class Lang():
  
 
     
-class IntentsAndSlots (data.Dataset):
+class Slots(data.Dataset):
     # Mandatory methods are __init__, __len__ and __getitem__
-    def __init__(self, dataset, lang, unk='unk'):
-        self.utterances = []
-        self.intents = []
+    def __init__(self, dataset, lang:Lang, unk='unk'):
+        self.sentences = []
         self.slots = []
         self.unk = unk
         self.bert_tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         
         for x in dataset:
-            self.utterances.append(x['utterance'])
+            self.sentences.append(x['sentence'])
             self.slots.append(x['slots'])
-            self.intents.append(x['intent'])
 
-        self.utt_ids,self.slot_ids = self.mapping_seq(self.utterances,self.slots, lang.slot2id)
-        self.intent_ids  = self.mapping_lab(self.intents,lang.intent2id)
+        self.utt_ids,self.slot_ids = self.mapping_seq(self.sentences,self.slots, lang.slot2id)
 
     def __len__(self):
-        return len(self.utterances)
+        return len(self.sentences)
 
     def __getitem__(self, idx):
         utt = torch.Tensor(self.utt_ids[idx])
         slots = torch.Tensor(self.slot_ids[idx])
-        intent = self.intent_ids[idx]
-        sample = {'utterance': utt, 'slots': slots, 'intent': intent}
+        sample = {'sentence': utt, 'slots': slots}
         return sample
     
-    # Auxiliary methods
-    
-    def mapping_lab(self, data, mapper):
-        return [mapper[x] if x in mapper else mapper[self.unk] for x in data]
-    
-    def mapping_seq(self, utterances, slots, mapper): # Map sequences to number
+    def mapping_seq(self, sentences, slots, mapper): # Map sequences to number
 
         slot_ids = []
         utt_ids = []
-        for utterance,slots_row in zip(utterances,slots):
+        for sentence,slots_row in zip(sentences,slots):
             tokenize_slots = [PAD_TOKEN]
             sentence_id = [101]
-            for word,slot in zip(utterance.split(' '),slots_row.split(' ')):
+            for word,slot in zip(sentence.split(' '),slots_row.split(' ')):
                 tokens = self.bert_tokenizer([word])['input_ids'][0]
                 tokens = tokens[1:len(tokens)-1]
                 sentence_id.extend(tokens)
@@ -146,15 +122,14 @@ def collate_fn(data):
         padded_seqs = padded_seqs.detach()  # We remove these tensors from the computational graph
         return padded_seqs, lengths
     # Sort data by seq lengths
-    data.sort(key=lambda x: len(x['utterance']), reverse=True) 
+    data.sort(key=lambda x: len(x['sentence']), reverse=True) 
     new_item = {}
     for key in data[0].keys():
         new_item[key] = [d[key] for d in data]
         
     # We just need one length for packed pad seq, since len(utt) == len(slots)
-    src_utt, _ = merge(new_item['utterance'])
+    src_utt, _ = merge(new_item['sentence'])
     y_slots, y_lengths = merge(new_item["slots"])
-    intent = torch.LongTensor(new_item["intent"])
 
     attention_mask = torch.where(src_utt != 0, torch.tensor(1), torch.tensor(0))
     token_type_ids = torch.zeros_like(attention_mask)
@@ -172,8 +147,7 @@ def collate_fn(data):
         "token_type_ids" : token_type_ids
     }
 
-    new_item["utterances"] = input_bert
-    new_item["intents"] = intent
+    new_item["sentences"] = input_bert
     new_item["y_slots"] = y_slots
     new_item["slots_len"] = y_lengths
     return new_item

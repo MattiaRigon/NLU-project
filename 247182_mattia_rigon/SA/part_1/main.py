@@ -6,59 +6,47 @@ from collections import Counter
 import os
 from functions import *
 from pprint import pprint
-from utils import PAD_TOKEN,IntentsAndSlots, collate_fn, load_data, Lang
+from utils import PAD_TOKEN,Slots, collate_fn, load_data, Lang
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
 from transformers import BertTokenizer,BertConfig
 import torch.optim as optim
 from tqdm import tqdm
-from model import JointIntentSlotsBert
+from model import SABert
 import copy
+import os
+
+LOCAL_PATH = os.path.dirname(os.path.abspath(__file__))
+
 
 if __name__ == "__main__":
     
     # Load the data
     device = 'cuda:0'
-    tmp_train_raw = load_data(os.path.join('datasets','laptop14_train.txt'))
-    test_raw = load_data(os.path.join('dataset','laptop14_test.txt'))
+    tmp_train_raw = load_data(os.path.join(LOCAL_PATH,'dataset','laptop14_train.txt'))
+    test_raw = load_data(os.path.join(LOCAL_PATH,'dataset','laptop14_test.txt'))
 
     portion = 0.10
-    intents = [x['intent'] for x in tmp_train_raw] # We stratify on intents
-    count_y = Counter(intents) # like a dict with intent:frequency
+    slots = [x['slots'] for x in tmp_train_raw]
 
-    labels = []
-    inputs = []
-    mini_train = []
-
-    for id_y, y in enumerate(intents):
-        if count_y[y] > 1: # If some intents occurs only once, we put them in training
-            inputs.append(tmp_train_raw[id_y])
-            labels.append(y)
-        else:
-            mini_train.append(tmp_train_raw[id_y])
-    # Random Stratify
-    X_train, X_dev, y_train, y_dev = train_test_split(inputs, labels, test_size=portion, 
+    X_train, X_dev, y_train, y_dev = train_test_split(tmp_train_raw,slots, test_size=portion, 
                                                         random_state=42, 
                                                         shuffle=True,
-                                                        stratify=labels)
-    X_train.extend(mini_train)
+                                                        )
     train_raw = X_train
     dev_raw = X_dev
 
-    y_test = [x['intent'] for x in test_raw]
-
-    words = sum([x['utterance'].split() for x in train_raw], []) # No set() since we want to compute 
+    words = sum([x['sentence'].split() for x in train_raw], []) # No set() since we want to compute 
                                                             # the cutoff
     corpus = train_raw + dev_raw + test_raw # We do not wat unk labels, 
                                             # however this depends on the research purpose
     slots = set(sum([line['slots'].split() for line in corpus],[]))
-    intents = set([line['intent'] for line in corpus])
 
-    lang = Lang(words, intents, slots, cutoff=0)
+    lang = Lang(words, slots, cutoff=0)
 
-    train_dataset = IntentsAndSlots(train_raw, lang)
-    dev_dataset = IntentsAndSlots(dev_raw, lang)
-    test_dataset = IntentsAndSlots(test_raw, lang)
+    train_dataset = Slots(train_raw, lang)
+    dev_dataset = Slots(dev_raw, lang)
+    test_dataset = Slots(test_raw, lang)
 
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
@@ -70,10 +58,9 @@ if __name__ == "__main__":
     clip = 5 # Clip the gradient
 
     out_slot = len(lang.slot2id)
-    out_int = len(lang.intent2id)
     vocab_len = len(lang.word2id)
     config = BertConfig.from_pretrained('bert-base-uncased')
-    model = JointIntentSlotsBert(config=config,out_slot=out_slot, out_int=out_int, dropout=0.1)
+    model = SABert(config=config,out_slot=out_slot, dropout=0.1)
     model.to(device)
     model.apply(init_weights)
 
@@ -85,7 +72,6 @@ if __name__ == "__main__":
     losses_train = []
     losses_dev = []
     sampled_epochs = []
-    accuracy_history = []
     best_f1 = -1
     best_model = None
     for x in tqdm(range(1,n_epochs)):
@@ -94,9 +80,8 @@ if __name__ == "__main__":
         if x % 1 == 0: # We check the performance every 5 epochs
             sampled_epochs.append(x)
             losses_train.append(np.asarray(loss).mean())
-            results_dev, intent_res, loss_dev = eval_loop(dev_loader, criterion_slots, 
+            results_dev, loss_dev = eval_loop(dev_loader, criterion_slots, 
                                                         criterion_intents, model, lang,tokenizer)
-            accuracy_history.append(intent_res['accuracy'])
             losses_dev.append(np.asarray(loss_dev).mean())
             
             f1 = results_dev['total']['f']
@@ -121,4 +106,4 @@ if __name__ == "__main__":
     configurations = f'LR = {lr}\nhid_size = {config.hidden_size}\n\noptimizer={str(type(optimizer))}\nmodel={str(type(model))}\n'
     results_txt = f'{configurations}Intent Accuracy:  {intent_result}\nSlot F1: {f1_result}\nEpochs: {sampled_epochs[-1]}/{n_epochs} ' 
 
-    save_model_incrementally(best_model,sampled_epochs,losses_train,losses_dev,accuracy_history,results_txt)
+    save_model_incrementally(best_model,sampled_epochs,losses_train,losses_dev,results_txt)
