@@ -16,8 +16,34 @@ def load_data(path):
     '''
 
     dataset = []
-    with open(path) as f:
-        dataset = json.loads(f.read())
+    with open(path, 'r') as f:
+        for line in f:
+            sentence, slots_sentence = line.split("####")
+            slots_and_words = slots_sentence.split()
+            slots = []
+            for s in slots_and_words:
+                _,slot = s.split("=")
+                slots.append(slot)
+
+            # Remove punctuation from the beginning of the sentence
+            first_word = sentence.split()[0]
+            punctuations = ['.', '?', '!', ';', ':', ',']
+            if first_word in punctuations:
+                sentence = sentence.split()[1:]
+
+            # Place the punctuation at the end of the slot
+            last_word = sentence.split()[-1]
+            end_punctuations = ['.', '?', '!', ';']
+            for p in end_punctuations:
+                if last_word.endswith(p):
+                    last_word = last_word[:-1]
+                    sentence = ' '.join(sentence.split()[:-1]) + ' ' + last_word + ' ' + p
+                    slots = slots[:-1] + [slots[-1],p]
+                    
+            dataset.append({'utterance': sentence, 'slots': ' '.join(slots)})
+
+
+    
     return dataset
 
 class Lang():

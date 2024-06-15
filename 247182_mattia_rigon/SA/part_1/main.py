@@ -19,8 +19,8 @@ if __name__ == "__main__":
     
     # Load the data
     device = 'cuda:0'
-    tmp_train_raw = load_data(os.path.join('dataset','ATIS','train.json'))
-    test_raw = load_data(os.path.join('dataset','ATIS','test.json'))
+    tmp_train_raw = load_data(os.path.join('datasets','laptop14_train.txt'))
+    test_raw = load_data(os.path.join('dataset','laptop14_test.txt'))
 
     portion = 0.10
     intents = [x['intent'] for x in tmp_train_raw] # We stratify on intents
