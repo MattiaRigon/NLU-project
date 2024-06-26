@@ -36,17 +36,17 @@ if __name__ == "__main__":
     train_raw = X_train
     dev_raw = X_dev
 
-    words = sum([x['sentence'].split() for x in train_raw], []) # No set() since we want to compute 
+    words = sum([x['sentence'] for x in train_raw], []) # No set() since we want to compute 
                                                             # the cutoff
     corpus = train_raw + dev_raw + test_raw # We do not wat unk labels, 
                                             # however this depends on the research purpose
-    slots = set(sum([line['slots'].split() for line in corpus],[]))
+    slots = set(sum([line['slots'] for line in corpus],[]))
 
-    lang = Lang(words, slots, cutoff=0)
+    #lang = Lang(words, slots, cutoff=0)
 
-    train_dataset = Slots(train_raw, lang)
-    dev_dataset = Slots(dev_raw, lang)
-    test_dataset = Slots(test_raw, lang)
+    train_dataset = Slots(train_raw)
+    dev_dataset = Slots(dev_raw)
+    test_dataset = Slots(test_raw,)
 
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
@@ -57,8 +57,12 @@ if __name__ == "__main__":
     lr = 0.00005 # learning rate
     clip = 5 # Clip the gradient
 
-    out_slot = len(lang.slot2id)
-    vocab_len = len(lang.word2id)
+    # get the weights for the dataset
+    weights = get_weights(train_dataset)
+    # multiply the weights by 3 
+    weights = [x*10 for x in weights]
+
+    out_slot = 3
     config = BertConfig.from_pretrained('bert-base-uncased')
     model = SABert(config=config,out_slot=out_slot, dropout=0.1)
     model.to(device)
@@ -66,25 +70,26 @@ if __name__ == "__main__":
 
     optimizer = optim.Adam(model.parameters(), lr=lr)
     criterion_slots = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN)
-    criterion_intents = nn.CrossEntropyLoss() # Because we do not have the pad token
-    n_epochs = 50
+    n_epochs = 7
     patience = 3
     losses_train = []
     losses_dev = []
     sampled_epochs = []
+    accuracy_history = []
     best_f1 = -1
     best_model = None
     for x in tqdm(range(1,n_epochs)):
         loss = train_loop(train_loader, optimizer, criterion_slots, 
-                        criterion_intents, model, clip=clip)
+                         model, clip=clip)
         if x % 1 == 0: # We check the performance every 5 epochs
             sampled_epochs.append(x)
             losses_train.append(np.asarray(loss).mean())
             results_dev, loss_dev = eval_loop(dev_loader, criterion_slots, 
-                                                        criterion_intents, model, lang,tokenizer)
+                                                         model,tokenizer)
             losses_dev.append(np.asarray(loss_dev).mean())
             
-            f1 = results_dev['total']['f']
+            f1 = results_dev[2]
+            accuracy_history.append(f1)
             # For decreasing the patience you can also use the average between slot f1 and intent accuracy
             if f1 > best_f1:
                 best_f1 = f1
@@ -96,14 +101,12 @@ if __name__ == "__main__":
                 break # Not nice but it keeps the code clean
 
     best_model.to(device)
-    results_test, intent_test, _ = eval_loop(test_loader, criterion_slots, 
-                                            criterion_intents, best_model, lang,tokenizer)   
-    f1_result =   results_test['total']['f']
-    intent_result = intent_test['accuracy']
+    results_test, _ = eval_loop(test_loader, criterion_slots, 
+                                            best_model,tokenizer)   
+    f1_result =  results_test[2]
     print('Slot F1: ',f1_result)
-    print('Intent Accuracy:', intent_result)
 
     configurations = f'LR = {lr}\nhid_size = {config.hidden_size}\n\noptimizer={str(type(optimizer))}\nmodel={str(type(model))}\n'
-    results_txt = f'{configurations}Intent Accuracy:  {intent_result}\nSlot F1: {f1_result}\nEpochs: {sampled_epochs[-1]}/{n_epochs} ' 
+    results_txt = f'{configurations}\nSlot F1: {f1_result}\nEpochs: {sampled_epochs[-1]}/{n_epochs} ' 
 
-    save_model_incrementally(best_model,sampled_epochs,losses_train,losses_dev,results_txt)
+    save_model_incrementally(best_model,sampled_epochs,losses_train,losses_dev,accuracy_history,results_txt)

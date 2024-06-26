@@ -4,7 +4,7 @@ import os
 
 from matplotlib import pyplot as plt
 import numpy as np
-from conll import evaluate
+from evals import evaluate_ote
 from sklearn.metrics import classification_report
 import torch.nn as nn
 import torch
@@ -49,12 +49,12 @@ def post_process_model(intent_logits,slot_logits,intent_label_ids, slot_labels_i
 
 
 
-def train_loop(data, optimizer, criterion_slots, criterion_intents, model ,clip=5):
+def train_loop(data, optimizer, criterion_slots, model ,clip=5):
     model.train()
     loss_array = []
     for sample in data:
         optimizer.zero_grad() # Zeroing the gradient
-        slots, intents = model(sample['utterances'])
+        slots = model(sample['sentences'])
         # Compute the loss and softmax
         loss = criterion_slots(slots, sample['y_slots'])
                                        # Is there another way to do that?
@@ -65,7 +65,20 @@ def train_loop(data, optimizer, criterion_slots, criterion_intents, model ,clip=
         optimizer.step() # Update the weights
     return loss_array
 
-def eval_loop(data, criterion_slots, criterion_intents, model, lang : Lang, bert_tokenizer):
+def get_weights(dataset):
+    '''
+    Get the weights for the label in the dataset
+    '''
+    count = 0
+    length = 0
+    for sample in dataset:
+        for slot in sample['slots']:
+            length += 1
+            if 2 == int(slot):
+                count += 1
+    return [1, count/length, (length-count)/length]
+
+def eval_loop(data, criterion_slots, model, bert_tokenizer):
     model.eval()
     loss_array = []
     
@@ -77,7 +90,7 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang : Lang, bert
     #softmax = nn.Softmax(dim=1) # Use Softmax if you need the actual probability
     with torch.no_grad(): # It used to avoid the creation of computational graph
         for sample in data:
-            slots = model(sample['utterances'])
+            slots = model(sample['sentences'])
             
             loss = criterion_slots(slots, sample['y_slots'])
             loss_array.append(loss.item())
@@ -85,25 +98,25 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang : Lang, bert
             # Slot inference 
             output_slots = torch.argmax(slots, dim=1)
             for id_seq, seq in enumerate(output_slots):
-                utterance = bert_tokenizer.convert_ids_to_tokens(sample['utterances']['input_ids'][id_seq])
+                utterance = bert_tokenizer.convert_ids_to_tokens(sample['sentences']['input_ids'][id_seq])
                 length =  len(utterance)
                 
                 gt_ids = sample['y_slots'][id_seq].tolist()
-                gt_slots = [lang.id2slot[elem] for elem in gt_ids[:length]]
+                gt_slots = [elem for elem in gt_ids[:length]]
                             
                 to_decode = seq[:length].tolist()
                 delete_indexes = []
                 not_accepted_values = ['pad','[CLS]','[SEP]']
 
                 for i,item in  enumerate(gt_slots):
-                    if item in not_accepted_values:
+                    if item == 0:
                         delete_indexes.append(i)
 
-                ref_slots.append([(utterance[id_el], gt_slots[id_el]) for id_el, elem in enumerate(utterance) if gt_slots[id_el] not in not_accepted_values ])
+                ref_slots.append([gt_slots[id_el] for id_el, elem in enumerate(utterance) if gt_slots[id_el] != 0])
 
                 tmp_seq = []
                 for id_el, elem in enumerate(to_decode):
-                    tmp_seq.append((utterance[id_el], lang.id2slot[elem]))
+                    tmp_seq.append(elem)
                 real_tmp_slots = []
 
                 for i,slot in enumerate(tmp_seq):
@@ -112,7 +125,7 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang : Lang, bert
 
                 hyp_slots.append(real_tmp_slots)
     try:            
-        results = evaluate(ref_slots, hyp_slots)
+        results = evaluate_ote(ref_slots, hyp_slots)
     except Exception as ex:
         # Sometimes the model predicts a class that is not in REF
         print("Warning:", ex)

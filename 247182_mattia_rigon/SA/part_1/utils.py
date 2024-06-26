@@ -24,12 +24,17 @@ def load_data(path):
             sentence = []
             for s in slots_and_words:
                 word,slot = s.rsplit("=",1)
-                slots.append(slot)
+                id_slot = None
+                if slot == "O" : 
+                    id_slot = 1
+                else: 
+                    id_slot = 2
+                slots.append(id_slot)
                 sentence.append(word)
 
             if len(sentence) != len(slots):
                 raise ValueError("Length of sentence and slots do not match")
-            dataset.append({'sentence': ' '.join(sentence), 'slots': ' '.join(slots)})
+            dataset.append({'sentence': sentence, 'slots': slots})
 
     return dataset
 
@@ -62,7 +67,7 @@ class Lang():
     
 class Slots(data.Dataset):
     # Mandatory methods are __init__, __len__ and __getitem__
-    def __init__(self, dataset, lang:Lang, unk='unk'):
+    def __init__(self, dataset, lang:Lang = None, unk='unk'):
         self.sentences = []
         self.slots = []
         self.unk = unk
@@ -72,7 +77,7 @@ class Slots(data.Dataset):
             self.sentences.append(x['sentence'])
             self.slots.append(x['slots'])
 
-        self.utt_ids,self.slot_ids = self.mapping_seq(self.sentences,self.slots, lang.slot2id)
+        self.utt_ids,self.slot_ids = self.mapping_seq(self.sentences,self.slots)
 
     def __len__(self):
         return len(self.sentences)
@@ -83,18 +88,18 @@ class Slots(data.Dataset):
         sample = {'sentence': utt, 'slots': slots}
         return sample
     
-    def mapping_seq(self, sentences, slots, mapper): # Map sequences to number
+    def mapping_seq(self, sentences, slots): # Map sequences to number
 
         slot_ids = []
         utt_ids = []
         for sentence,slots_row in zip(sentences,slots):
             tokenize_slots = [PAD_TOKEN]
             sentence_id = [101]
-            for word,slot in zip(sentence.split(' '),slots_row.split(' ')):
+            for word,slot in zip(sentence,slots_row):
                 tokens = self.bert_tokenizer([word])['input_ids'][0]
                 tokens = tokens[1:len(tokens)-1]
                 sentence_id.extend(tokens)
-                tokenize_slots.append(mapper[slot])
+                tokenize_slots.append(slot)
                 tokenize_slots.extend([PAD_TOKEN] * (len(tokens) -1))
 
             sentence_id.append(102)
@@ -138,7 +143,6 @@ def collate_fn(data):
     attention_mask = attention_mask.to(device)
     token_type_ids = token_type_ids.to(device)
     y_slots = y_slots.to(device)
-    intent = intent.to(device)
     y_lengths = torch.LongTensor(y_lengths).to(device)
 
     input_bert = {

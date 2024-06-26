@@ -1,0 +1,8 @@
+LR = 5e-05
+hid_size = 768
+
+optimizer=<class 'torch.optim.adam.Adam'>
+model=<class 'model.SABert'>
+
+Slot F1: 0.8801090956133008
+Epochs: 15/50 
