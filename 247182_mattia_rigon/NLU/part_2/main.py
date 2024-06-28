@@ -14,13 +14,19 @@ import torch.optim as optim
 from tqdm import tqdm
 from model import JointIntentSlotsBert
 import copy
+import argparse
+
+LOCAL_PATH = os.path.dirname(os.path.abspath(__file__))
 
 if __name__ == "__main__":
     
+    parser = argparse.ArgumentParser(description="Test application")
+    parser.add_argument('--test',action='store_true', help='If test enabled just evaluate the model with model.pth, otherwise train')
+    args = parser.parse_args()
     # Load the data
     device = 'cuda:0'
-    tmp_train_raw = load_data(os.path.join('dataset','ATIS','train.json'))
-    test_raw = load_data(os.path.join('dataset','ATIS','test.json'))
+    tmp_train_raw = load_data(os.path.join(LOCAL_PATH,'dataset','ATIS','train.json'))
+    test_raw = load_data(os.path.join(LOCAL_PATH,'dataset','ATIS','test.json'))
 
     portion = 0.10
     intents = [x['intent'] for x in tmp_train_raw] # We stratify on intents
@@ -88,37 +94,56 @@ if __name__ == "__main__":
     accuracy_history = []
     best_f1 = -1
     best_model = None
-    for x in tqdm(range(1,n_epochs)):
-        loss = train_loop(train_loader, optimizer, criterion_slots, 
-                        criterion_intents, model, clip=clip)
-        if x % 1 == 0: # We check the performance every 5 epochs
-            sampled_epochs.append(x)
-            losses_train.append(np.asarray(loss).mean())
-            results_dev, intent_res, loss_dev = eval_loop(dev_loader, criterion_slots, 
-                                                        criterion_intents, model, lang,tokenizer)
-            accuracy_history.append(intent_res['accuracy'])
-            losses_dev.append(np.asarray(loss_dev).mean())
-            
-            f1 = results_dev['total']['f']
-            # For decreasing the patience you can also use the average between slot f1 and intent accuracy
-            if f1 > best_f1:
-                best_f1 = f1
-                best_model = copy.deepcopy(model).to('cpu')
-                patience = 3
-            else:
-                patience -= 1
-            if patience <= 0: # Early stopping with patience
-                break # Not nice but it keeps the code clean
 
-    best_model.to(device)
-    results_test, intent_test, _ = eval_loop(test_loader, criterion_slots, 
-                                            criterion_intents, best_model, lang,tokenizer)   
-    f1_result =   results_test['total']['f']
-    intent_result = intent_test['accuracy']
-    print('Slot F1: ',f1_result)
-    print('Intent Accuracy:', intent_result)
+    if True:
+        saved_model = torch.load(os.path.join(LOCAL_PATH,'bin','model.pth'))
+        lang.word2id = saved_model['w2id']
+        lang.slot2id = saved_model['slot2id']
+        lang.intent2id = saved_model['intent2id']
+        model.load_state_dict(saved_model['model'])
+        results_test, intent_test, _ = eval_loop(test_loader, criterion_slots, criterion_intents, model, lang,tokenizer)
+        f1_result =   results_test['total']['f']
+        intent_result = intent_test['accuracy']
+        print('Slot F1: ',f1_result)
+        print('Intent Accuracy:', intent_result)
+    else:
 
-    configurations = f'LR = {lr}\nhid_size = {config.hidden_size}\n\noptimizer={str(type(optimizer))}\nmodel={str(type(model))}\n'
-    results_txt = f'{configurations}Intent Accuracy:  {intent_result}\nSlot F1: {f1_result}\nEpochs: {sampled_epochs[-1]}/{n_epochs} ' 
+        for x in tqdm(range(1,n_epochs)):
+            loss = train_loop(train_loader, optimizer, criterion_slots, 
+                            criterion_intents, model, clip=clip)
+            if x % 1 == 0: # We check the performance every 5 epochs
+                sampled_epochs.append(x)
+                losses_train.append(np.asarray(loss).mean())
+                results_dev, intent_res, loss_dev = eval_loop(dev_loader, criterion_slots, criterion_intents, model, lang,tokenizer)
+                accuracy_history.append(intent_res['accuracy'])
+                losses_dev.append(np.asarray(loss_dev).mean())
+                
+                f1 = results_dev['total']['f']
+                # For decreasing the patience you can also use the average between slot f1 and intent accuracy
+                if f1 > best_f1:
+                    best_f1 = f1
+                    best_model = copy.deepcopy(model).to('cpu')
+                    patience = 3
+                else:
+                    patience -= 1
+                if patience <= 0: # Early stopping with patience
+                    break # Not nice but it keeps the code clean
 
-    save_model_incrementally(best_model,sampled_epochs,losses_train,losses_dev,accuracy_history,results_txt)
+        best_model.to(device)
+        results_test, intent_test, _ = eval_loop(test_loader, criterion_slots, 
+                                                criterion_intents, best_model, lang,tokenizer)   
+        f1_result =   results_test['total']['f']
+        intent_result = intent_test['accuracy']
+        print('Slot F1: ',f1_result)
+        print('Intent Accuracy:', intent_result)
+
+        saving_model = {"epoch": sampled_epochs[-1], 
+                    "model": best_model.state_dict(), 
+                    "optimizer": optimizer.state_dict(), 
+                    "id2slot": lang.id2slot, 
+                    "id2intent": lang.id2intent}
+
+        configurations = f'LR = {lr}\nhid_size = {config.hidden_size}\n\noptimizer={str(type(optimizer))}\nmodel={str(type(model))}\n'
+        results_txt = f'{configurations}Intent Accuracy:  {intent_result}\nSlot F1: {f1_result}\nEpochs: {sampled_epochs[-1]}/{n_epochs} ' 
+
+        save_model_incrementally(saving_model,sampled_epochs,losses_train,losses_dev,accuracy_history,results_txt)

@@ -15,14 +15,18 @@ from tqdm import tqdm
 from model import SABert
 import copy
 import os
+import argparse
 
 LOCAL_PATH = os.path.dirname(os.path.abspath(__file__))
 
-
 if __name__ == "__main__":
-    
+
+    parser = argparse.ArgumentParser(description="Test application")
+    parser.add_argument('--test',action='store_true', help='If test enabled just evaluate the model with model.pth, otherwise train')
+    args = parser.parse_args()
     # Load the data
     device = 'cuda:0'
+
     tmp_train_raw = load_data(os.path.join(LOCAL_PATH,'dataset','laptop14_train.txt'))
     test_raw = load_data(os.path.join(LOCAL_PATH,'dataset','laptop14_test.txt'))
 
@@ -42,8 +46,6 @@ if __name__ == "__main__":
                                             # however this depends on the research purpose
     slots = set(sum([line['slots'] for line in corpus],[]))
 
-    #lang = Lang(words, slots, cutoff=0)
-
     train_dataset = Slots(train_raw)
     dev_dataset = Slots(dev_raw)
     test_dataset = Slots(test_raw,)
@@ -56,12 +58,6 @@ if __name__ == "__main__":
 
     lr = 0.00005 # learning rate
     clip = 5 # Clip the gradient
-
-    # get the weights for the dataset
-    weights = get_weights(train_dataset)
-    # multiply the weights by 3 
-    weights = [x*10 for x in weights]
-
     out_slot = 3
     config = BertConfig.from_pretrained('bert-base-uncased')
     model = SABert(config=config,out_slot=out_slot, dropout=0.1)
@@ -78,35 +74,41 @@ if __name__ == "__main__":
     accuracy_history = []
     best_f1 = -1
     best_model = None
-    for x in tqdm(range(1,n_epochs)):
-        loss = train_loop(train_loader, optimizer, criterion_slots, 
-                         model, clip=clip)
-        if x % 1 == 0: # We check the performance every 5 epochs
-            sampled_epochs.append(x)
-            losses_train.append(np.asarray(loss).mean())
-            results_dev, loss_dev = eval_loop(dev_loader, criterion_slots, 
-                                                         model,tokenizer)
-            losses_dev.append(np.asarray(loss_dev).mean())
-            
-            f1 = results_dev[2]
-            accuracy_history.append(f1)
-            # For decreasing the patience you can also use the average between slot f1 and intent accuracy
-            if f1 > best_f1:
-                best_f1 = f1
-                best_model = copy.deepcopy(model).to('cpu')
-                patience = 3
-            else:
-                patience -= 1
-            if patience <= 0: # Early stopping with patience
-                break # Not nice but it keeps the code clean
 
-    best_model.to(device)
-    results_test, _ = eval_loop(test_loader, criterion_slots, 
-                                            best_model,tokenizer)   
-    f1_result =  results_test[2]
-    print('Slot F1: ',f1_result)
+    if args.test:
+        saved_model = torch.load(os.path.join(LOCAL_PATH,'bin','model.pth'))
+        model.load_state_dict(saved_model)
+        results_test, _ = eval_loop(test_loader, criterion_slots, model,tokenizer)
+        print('Aspect Precision', results_test[0])
+        print('Aspect Recall', results_test[1])
+        print('Aspect F1', results_test[2])
+    else:
+        for x in tqdm(range(1,n_epochs)):
+            loss = train_loop(train_loader, optimizer, criterion_slots, 
+                            model, clip=clip)
+            if x % 1 == 0: 
+                sampled_epochs.append(x)
+                losses_train.append(np.asarray(loss).mean())
+                results_dev, loss_dev = eval_loop(dev_loader, criterion_slots,model,tokenizer)
+                losses_dev.append(np.asarray(loss_dev).mean())
+                
+                f1 = results_dev[2]
+                accuracy_history.append(f1)
+                # For decreasing the patience you can also use the average between slot f1 and intent accuracy
+                if f1 > best_f1:
+                    best_f1 = f1
+                    best_model = copy.deepcopy(model).to('cpu')
+                    patience = 3
+                else:
+                    patience -= 1
+                if patience <= 0: # Early stopping with patience
+                    break # Not nice but it keeps the code clean
 
-    configurations = f'LR = {lr}\nhid_size = {config.hidden_size}\n\noptimizer={str(type(optimizer))}\nmodel={str(type(model))}\n'
-    results_txt = f'{configurations}\nSlot F1: {f1_result}\nEpochs: {sampled_epochs[-1]}/{n_epochs} ' 
-
-    save_model_incrementally(best_model,sampled_epochs,losses_train,losses_dev,accuracy_history,results_txt)
+        best_model.to(device)
+        results_test, _ = eval_loop(test_loader, criterion_slots,best_model,tokenizer)   
+        print('Aspect Precision', results_test[0])
+        print('Aspect Recall', results_test[1])
+        print('Aspect F1', results_test[2])
+        configurations = f'LR = {lr}\nhid_size = {config.hidden_size}\n\noptimizer={str(type(optimizer))}\nmodel={str(type(model))}\n'
+        results_txt = f'{configurations}\nSlot F1: {results_test[2]}\nEpochs: {sampled_epochs[-1]}/{n_epochs} ' 
+        save_model_incrementally(best_model,sampled_epochs,losses_train,losses_dev,accuracy_history,results_txt)
