@@ -1,0 +1,8 @@
+LR = 5e-05
+hid_size = 768
+
+optimizer=<class 'torch.optim.adam.Adam'>
+model=<class 'model.JointIntentSlotsBert'>
+Intent Accuracy:  0.9776035834266518
+Slot F1: 0.9499209277807064
+Epochs: 33/50 

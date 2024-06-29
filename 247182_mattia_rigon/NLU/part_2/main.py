@@ -17,7 +17,7 @@ import copy
 import argparse
 
 LOCAL_PATH = os.path.dirname(os.path.abspath(__file__))
-
+saved_model = None
 if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="Test application")
@@ -62,6 +62,12 @@ if __name__ == "__main__":
 
     lang = Lang(words, intents, slots, cutoff=0)
 
+    if args.test:
+        saved_model = torch.load(os.path.join(LOCAL_PATH,'bin','model.pth'))
+        lang.word2id = saved_model['word2id']
+        lang.slot2id = saved_model['slot2id']
+        lang.intent2id = saved_model['intent2id']
+
     train_dataset = IntentsAndSlots(train_raw, lang)
     dev_dataset = IntentsAndSlots(dev_raw, lang)
     test_dataset = IntentsAndSlots(test_raw, lang)
@@ -95,11 +101,7 @@ if __name__ == "__main__":
     best_f1 = -1
     best_model = None
 
-    if True:
-        saved_model = torch.load(os.path.join(LOCAL_PATH,'bin','model.pth'))
-        lang.word2id = saved_model['w2id']
-        lang.slot2id = saved_model['slot2id']
-        lang.intent2id = saved_model['intent2id']
+    if args.test:
         model.load_state_dict(saved_model['model'])
         results_test, intent_test, _ = eval_loop(test_loader, criterion_slots, criterion_intents, model, lang,tokenizer)
         f1_result =   results_test['total']['f']
@@ -140,8 +142,9 @@ if __name__ == "__main__":
         saving_model = {"epoch": sampled_epochs[-1], 
                     "model": best_model.state_dict(), 
                     "optimizer": optimizer.state_dict(), 
-                    "id2slot": lang.id2slot, 
-                    "id2intent": lang.id2intent}
+                    "word2id": lang.word2id, 
+                    "slot2id": lang.slot2id, 
+                    "intent2id": lang.intent2id}
 
         configurations = f'LR = {lr}\nhid_size = {config.hidden_size}\n\noptimizer={str(type(optimizer))}\nmodel={str(type(model))}\n'
         results_txt = f'{configurations}Intent Accuracy:  {intent_result}\nSlot F1: {f1_result}\nEpochs: {sampled_epochs[-1]}/{n_epochs} ' 
