@@ -4,7 +4,7 @@ from collections import Counter
 from torch.utils.data import DataLoader
 import json
 PAD_TOKEN = 0
-device = 'cuda:0'
+DEVICE = 'cuda:0'
 
 
 def load_data(path):
@@ -117,10 +117,10 @@ def collate_fn(data):
     y_slots, y_lengths = merge(new_item["slots"])
     intent = torch.LongTensor(new_item["intent"])
     
-    src_utt = src_utt.to(device) # We load the Tensor on our selected device
-    y_slots = y_slots.to(device)
-    intent = intent.to(device)
-    y_lengths = torch.LongTensor(y_lengths).to(device)
+    src_utt = src_utt.to(DEVICE) # We load the Tensor on our selected DEVICE
+    y_slots = y_slots.to(DEVICE)
+    intent = intent.to(DEVICE)
+    y_lengths = torch.LongTensor(y_lengths).to(DEVICE)
     
     new_item["utterances"] = src_utt
     new_item["intents"] = intent

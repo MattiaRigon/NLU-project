@@ -7,21 +7,24 @@ import torch.optim as optim
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from torch.utils.data import DataLoader
-from utils import PAD_TOKEN, IntentsAndSlots, Lang, collate_fn, load_data
+from utils import *
 from model import ModelIAS
 import numpy as np
 import torch.optim as optim
+import argparse
 
-
+LOCAL_PATH = os.path.dirname(os.path.abspath(__file__))
+saved_model = None
 
 if __name__ == "__main__":
 
-
+    parser = argparse.ArgumentParser(description="Test application")
+    parser.add_argument('--test',action='store_true', help='If test enabled just evaluate the model with model.pth, otherwise train')
+    args = parser.parse_args()
     # Dataloader instantiation
     # You can reduce the batch_size if the GPU memory is not enough
-    device = 'cuda:0'
-    tmp_train_raw = load_data(os.path.join('dataset','ATIS','train.json'))
-    test_raw = load_data(os.path.join('dataset','ATIS','test.json'))
+    tmp_train_raw = load_data(os.path.join(LOCAL_PATH,'dataset','ATIS','train.json'))
+    test_raw = load_data(os.path.join(LOCAL_PATH,'dataset','ATIS','test.json'))
 
     portion = 0.10
 
@@ -58,6 +61,12 @@ if __name__ == "__main__":
 
     lang = Lang(words, intents, slots, cutoff=0)
 
+    if args.test:
+        saved_model = torch.load(os.path.join(LOCAL_PATH,'bin','model.pth'))
+        lang.word2id = saved_model['word2id']
+        lang.slot2id = saved_model['slot2id']
+        lang.intent2id = saved_model['intent2id']
+
     train_dataset = IntentsAndSlots(train_raw, lang)
     dev_dataset = IntentsAndSlots(dev_raw, lang)
     test_dataset = IntentsAndSlots(test_raw, lang)
@@ -87,69 +96,89 @@ if __name__ == "__main__":
 
     runs = 5
     slot_f1s, intent_acc = [], []
-    for x in tqdm(range(0, runs)):
 
-        model = ModelIAS(hid_size, out_slot, out_int, emb_size, vocab_len, pad_index=PAD_TOKEN).to(device)
+    if args.test:
+        model = ModelIAS(hid_size, out_slot, out_int, emb_size, vocab_len, pad_index=PAD_TOKEN).to(DEVICE)
         model.apply(init_weights)
-        optimizer = optim.Adam(model.parameters(), lr=lr)
+        model.load_state_dict(saved_model['model'])
         criterion_slots = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN)
         criterion_intents = nn.CrossEntropyLoss() # Because we do not have the pad token
-        _sampled_epochs = []
-        best_f1 = 0
-        for x in range(1,n_epochs):
-            loss = train_loop(train_loader, optimizer, criterion_slots, 
-                            criterion_intents, model)
-            if x % 5 == 0:
-                _sampled_epochs.append(x)
-                losses_train.append(np.asarray(loss).mean())
-                results_dev, intent_res, loss_dev = eval_loop(dev_loader, criterion_slots, 
-                                                            criterion_intents, model, lang)
-                losses_dev.append(np.asarray(loss_dev).mean())
-                f1 = results_dev['total']['f']
-                accuracy_history.append(intent_res['accuracy'])
+        results_test, intent_test, _ = eval_loop(test_loader, criterion_slots, criterion_intents, model, lang)
+        print('Slot F1', results_test['total']['f'])
+        print('Intent Acc',intent_test['accuracy'])
+    else:
 
-                if f1 > best_f1:
-                    best_f1 = f1
-                    best_model = copy.deepcopy(model).to('cpu')
-                    patience = 3
-                else:
-                    patience -= 1
-                if patience <= 0: # Early stopping with patient
-                    break # Not nice but it keeps the code clean
+        for x in tqdm(range(0, runs)):
 
-        results_test, intent_test, _ = eval_loop(test_loader, criterion_slots, 
-                                                criterion_intents, model, lang)
-        intent_acc.append(intent_test['accuracy'])
-        slot_f1s.append(results_test['total']['f'])
-        sampled_epochs.append(_sampled_epochs)
+            model = ModelIAS(hid_size, out_slot, out_int, emb_size, vocab_len, pad_index=PAD_TOKEN).to(DEVICE)
+            model.apply(init_weights)
+            optimizer = optim.Adam(model.parameters(), lr=lr)
+            criterion_slots = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN)
+            criterion_intents = nn.CrossEntropyLoss() # Because we do not have the pad token
+            _sampled_epochs = []
+            best_f1 = 0
+            for x in range(1,n_epochs):
+                loss = train_loop(train_loader, optimizer, criterion_slots, 
+                                criterion_intents, model)
+                if x % 5 == 0:
+                    _sampled_epochs.append(x)
+                    losses_train.append(np.asarray(loss).mean())
+                    results_dev, intent_res, loss_dev = eval_loop(dev_loader, criterion_slots, 
+                                                                criterion_intents, model, lang)
+                    losses_dev.append(np.asarray(loss_dev).mean())
+                    f1 = results_dev['total']['f']
+                    accuracy_history.append(intent_res['accuracy'])
 
-    slot_f1s = np.asarray(slot_f1s)
-    intent_acc = np.asarray(intent_acc)
-    print('Slot F1', round(slot_f1s.mean(),3), '+-', round(slot_f1s.std(),3))
-    print('Intent Acc', round(intent_acc.mean(), 3), '+-', round(slot_f1s.std(), 3))
+                    if f1 > best_f1:
+                        best_f1 = f1
+                        best_model = copy.deepcopy(model).to('cpu')
+                        patience = 3
+                    else:
+                        patience -= 1
+                    if patience <= 0: # Early stopping with patient
+                        break # Not nice but it keeps the code clean
+            best_model.to(DEVICE)
+            results_test, intent_test, _ = eval_loop(test_loader, criterion_slots, 
+                                                    criterion_intents, best_model, lang)
+            intent_acc.append(intent_test['accuracy'])
+            slot_f1s.append(results_test['total']['f'])
+            sampled_epochs.append(_sampled_epochs)
 
-    configurations = dict()
-    configurations['lr'] = lr
-    configurations['hid_size'] = hid_size
-    configurations['emb_size'] = emb_size
-    configurations['optimizer'] = str(type(optimizer))
-    configurations['model'] = str(type(model))
-    configurations['n_epochs'] = n_epochs
-    configurations['patience'] = patience
-    configurations['clip'] = clip
-    configurations['runs'] = runs
+        slot_f1s = np.asarray(slot_f1s)
+        intent_acc = np.asarray(intent_acc)
+        print('Slot F1', round(slot_f1s.mean(),3), '+-', round(slot_f1s.std(),3))
+        print('Intent Acc', round(intent_acc.mean(), 3), '+-', round(slot_f1s.std(), 3))
 
-    results = dict()
-    results['configurations'] = configurations
-    results['slot_f1s_mean'] = round(slot_f1s.mean(),3)
-    results['slot_f1s_std'] = round(slot_f1s.std(),3)
-    results['intent_acc_mean'] = round(intent_acc.mean(), 3)
-    results['intent_acc_std'] = round(slot_f1s.std(), 3)
-    results['slot_f1s'] = slot_f1s
-    results['intent_acc'] = intent_acc
-    results['sampled_epochs'] = sampled_epochs
-    results['losses_train'] = losses_train
-    results['losses_dev'] = losses_dev
-    results['accuracy_history'] = accuracy_history
+        configurations = dict()
+        configurations['lr'] = lr
+        configurations['hid_size'] = hid_size
+        configurations['emb_size'] = emb_size
+        configurations['optimizer'] = str(type(optimizer))
+        configurations['model'] = str(type(model))
+        configurations['n_epochs'] = n_epochs
+        configurations['patience'] = patience
+        configurations['clip'] = clip
+        configurations['runs'] = runs
 
-    save_model_incrementally(best_model,sampled_epochs,losses_train,losses_dev,accuracy_history,results)
+        results = dict()
+        results['configurations'] = configurations
+        results['slot_f1s_mean'] = round(slot_f1s.mean(),3)
+        results['slot_f1s_std'] = round(slot_f1s.std(),3)
+        results['intent_acc_mean'] = round(intent_acc.mean(), 3)
+        results['intent_acc_std'] = round(slot_f1s.std(), 3)
+        results['slot_f1s'] = slot_f1s
+        results['intent_acc'] = intent_acc
+        results['sampled_epochs'] = sampled_epochs
+        results['losses_train'] = losses_train
+        results['losses_dev'] = losses_dev
+        results['accuracy_history'] = accuracy_history
+
+        saving_model = {"epoch": sampled_epochs[-1], 
+            "model": best_model.state_dict(), 
+            "optimizer": optimizer.state_dict(), 
+            "word2id": lang.word2id, 
+            "slot2id": lang.slot2id, 
+            "intent2id": lang.intent2id 
+        }
+
+        save_model_incrementally(saving_model,sampled_epochs,losses_train,losses_dev,accuracy_history,results)

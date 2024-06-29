@@ -12,10 +12,15 @@ from utils import Lang, PennTreeBank, collate_fn, read_file
 from functools import partial
 from model import LSTM
 import numpy as np
+import argparse
+LOCAL_PATH = os.path.dirname(os.path.abspath(__file__))
 
 
 if __name__ == "__main__":
 
+    parser = argparse.ArgumentParser(description="Test application")
+    parser.add_argument('--test',action='store_true', help='If test enabled just evaluate the model with model.pth, otherwise train')
+    args = parser.parse_args()
 
     # Dataloader instantiation
     # You can reduce the batch_size if the GPU memory is not enough
@@ -72,58 +77,65 @@ if __name__ == "__main__":
     ppl_history = []
     best_ppl = math.inf
     best_model = None
-    pbar = tqdm(range(1,n_epochs))
-    #If the PPL is too high try to change the learning rate
-    for epoch in pbar:
-        loss = train_loop(train_loader, optimizer, criterion_train, model, average_seq_len, clip=clip)
-        
+    if args.test:
+        saved_model = torch.load(os.path.join(LOCAL_PATH,'bin','model.pth'))
+        model.load_state_dict(saved_model)
+        final_ppl,  _ = eval_loop(test_loader, criterion_eval, model)
+        print('Test ppl: ', final_ppl)
+    else:
+            
+        pbar = tqdm(range(1,n_epochs))
+        #If the PPL is too high try to change the learning rate
+        for epoch in pbar:
+            loss = train_loop(train_loader, optimizer, criterion_train, model, average_seq_len, clip=clip)
+            
 
-        if epoch % 1 == 0:
+            if epoch % 1 == 0:
 
-            if epoch % 5 == 0 :
-                if (lr *0.75) < 1.5 :
-                    lr = 1.5
-                else:
-                    lr = lr * 0.75
+                if epoch % 5 == 0 :
+                    if (lr *0.75) < 1.5 :
+                        lr = 1.5
+                    else:
+                        lr = lr * 0.75
 
-            sampled_epochs.append(epoch)
-            losses_train.append(np.asarray(loss).mean())
+                sampled_epochs.append(epoch)
+                losses_train.append(np.asarray(loss).mean())
 
-            if isinstance(optimizer,torch.optim.ASGD):
-                tmp = {}
-                for prm in model.parameters():
-                    tmp[prm] = prm.data.clone()
-                    prm.data = optimizer.state[prm]['ax'].clone()
+                if isinstance(optimizer,torch.optim.ASGD):
+                    tmp = {}
+                    for prm in model.parameters():
+                        tmp[prm] = prm.data.clone()
+                        prm.data = optimizer.state[prm]['ax'].clone()
 
 
-            ppl_dev, loss_dev = eval_loop(dev_loader, criterion_eval, model)
-            losses_dev.append(np.asarray(loss_dev).mean())
-            pbar.set_description("PPL: %f" % ppl_dev)
-            ppl_history.append(ppl_dev)
-            if  ppl_dev < best_ppl: # the lower, the better
-                best_ppl = ppl_dev
-                best_model = copy.deepcopy(model).to('cpu')
-                patience = 5
-            else:
-                patience -= 1
-
-            if isinstance(optimizer,torch.optim.ASGD):
-                prm.data = tmp[prm].clone()
-
-            if patience <= 0: # Early stopping with patience
-                if isinstance(optimizer,torch.optim.SGD):
-                    print('Switching to ASGD')
-                    optimizer = torch.optim.ASGD(model.parameters(), lr=lr, t0=0, lambd=0., weight_decay=wdecay)
+                ppl_dev, loss_dev = eval_loop(dev_loader, criterion_eval, model)
+                losses_dev.append(np.asarray(loss_dev).mean())
+                pbar.set_description("PPL: %f" % ppl_dev)
+                ppl_history.append(ppl_dev)
+                if  ppl_dev < best_ppl: # the lower, the better
+                    best_ppl = ppl_dev
+                    best_model = copy.deepcopy(model).to('cpu')
                     patience = 5
                 else:
-                    break # Not nice but it keeps the code clean
+                    patience -= 1
 
-    best_model.to(device)
-    final_ppl,  _ = eval_loop(test_loader, criterion_eval, best_model)
-    print('Test ppl: ', final_ppl)
+                if isinstance(optimizer,torch.optim.ASGD):
+                    prm.data = tmp[prm].clone()
 
-    configurations = f'LR = {lr}\nhid_size = {hid_size}\nemb_size={emb_size}\noptimizer={str(type(optimizer))}\nmodel={str(type(model))}\nemb_dropout={emb_dropout}\nout_dropout={out_dropout}\nwdecay={wdecay}\nnonMono={nonMono}\nbatch{batch_train}\n'
-    results_txt = f'{configurations}Test ppl:  {final_ppl} + Epochs: {sampled_epochs[-1]}/{n_epochs} ' 
+                if patience <= 0: # Early stopping with patience
+                    if isinstance(optimizer,torch.optim.SGD):
+                        print('Switching to ASGD')
+                        optimizer = torch.optim.ASGD(model.parameters(), lr=lr, t0=0, lambd=0., weight_decay=wdecay)
+                        patience = 5
+                    else:
+                        break # Not nice but it keeps the code clean
 
-    save_model_incrementally(best_model,sampled_epochs,losses_train,losses_dev,ppl_history,results_txt)
+        best_model.to(device)
+        final_ppl,  _ = eval_loop(test_loader, criterion_eval, best_model)
+        print('Test ppl: ', final_ppl)
+
+        configurations = f'LR = {lr}\nhid_size = {hid_size}\nemb_size={emb_size}\noptimizer={str(type(optimizer))}\nmodel={str(type(model))}\nemb_dropout={emb_dropout}\nout_dropout={out_dropout}\nwdecay={wdecay}\nnonMono={nonMono}\nbatch{batch_train}\n'
+        results_txt = f'{configurations}Test ppl:  {final_ppl} + Epochs: {sampled_epochs[-1]}/{n_epochs} ' 
+
+        save_model_incrementally(best_model,sampled_epochs,losses_train,losses_dev,ppl_history,results_txt)
 

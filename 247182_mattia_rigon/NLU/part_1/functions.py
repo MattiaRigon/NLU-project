@@ -140,7 +140,7 @@ def save_model_incrementally(model, sampled_epochs, losses_train, losses_dev, ac
     print(f'Results saved to {results_path}')
     # Save the model in the new directory
     model_path = os.path.join(new_test_dir, model_name)
-    torch.save(model.state_dict(), model_path)
+    torch.save(model, model_path)
     print(f'Model saved to {model_path}')
 
 def save_plot_losses(sampled_epochs,losses_train,losses_dev,path):
