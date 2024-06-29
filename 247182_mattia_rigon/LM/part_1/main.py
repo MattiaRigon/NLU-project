@@ -20,8 +20,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Test application")
     parser.add_argument('--test',action='store_true', help='If test enabled just evaluate the model with model.pth, otherwise train')
     args = parser.parse_args()
-    # Dataloader instantiation
-    # You can reduce the batch_size if the GPU memory is not enough
 
     train_raw = read_file("dataset/PennTreeBank/ptb.train.txt")
     dev_raw = read_file("dataset/PennTreeBank/ptb.valid.txt")
@@ -37,17 +35,10 @@ if __name__ == "__main__":
     dev_loader = DataLoader(dev_dataset, batch_size=1024, collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]))
     test_loader = DataLoader(test_dataset, batch_size=1024, collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]))
 
-    #Wrtite the code to load the datasets and to run your functions
-    # Print the results
-    # Experiment also with a smaller or bigger model by changing hid and emb sizes
-    # A large model tends to overfit
     hid_size = 400
     emb_size = 400
     emb_dropout = 0.6
     out_dropout = 0.6
-
-    # Don't forget to experiment with a lower training batch size
-    # Increasing the back propagation steps can be seen as a regularization step
 
     lr = 0.001 # This is definitely not good for SGD
     clip = 5 # Clip the gradient
@@ -69,7 +60,6 @@ if __name__ == "__main__":
     ppl_history = []
     best_ppl = math.inf
     best_model = None
-    #If the PPL is too high try to change the learning rate
 
     if args.test:
         saved_model = torch.load(os.path.join(LOCAL_PATH,'bin','model.pth'))
@@ -77,11 +67,9 @@ if __name__ == "__main__":
         final_ppl,  _ = eval_loop(test_loader, criterion_eval, model)
         print('Test ppl: ', final_ppl)
     else:
-
         pbar = tqdm(range(1,n_epochs))
         for epoch in pbar:
             loss = train_loop(train_loader, optimizer, criterion_train, model, clip)
-
             if epoch % 1 == 0:
                 sampled_epochs.append(epoch)
                 losses_train.append(np.asarray(loss).mean())
@@ -95,7 +83,6 @@ if __name__ == "__main__":
                     patience = 3
                 else:
                     patience -= 1
-
                 if patience <= 0: # Early stopping with patience
                     break # Not nice but it keeps the code clean
 

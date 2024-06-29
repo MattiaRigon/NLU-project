@@ -4,7 +4,7 @@ from functools import partial
 
 
 
-DEVICE = 'cuda:0' # it can be changed with 'cpu' if you do not have a gpu
+DEVICE = 'cuda:0' 
 
 def read_file(path, eos_token="<eos>"):
     output = []
@@ -69,7 +69,6 @@ class PennTreeBank (data.Dataset):
         return sample
 
     # Auxiliary methods
-
     def mapping_seq(self, data, lang): # Map sequences of tokens to corresponding computed in Lang class
         res = []
         for seq in data:
@@ -102,7 +101,6 @@ def collate_fn(data, pad_token):
         return padded_seqs, lengths
 
     # Sort data by seq lengths
-
     data.sort(key=lambda x: len(x["source"]), reverse=True)
     new_item = {}
     for key in data[0].keys():
