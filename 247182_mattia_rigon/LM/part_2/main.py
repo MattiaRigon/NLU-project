@@ -83,31 +83,23 @@ if __name__ == "__main__":
         final_ppl,  _ = eval_loop(test_loader, criterion_eval, model)
         print('Test ppl: ', final_ppl)
     else:
-            
         pbar = tqdm(range(1,n_epochs))
         #If the PPL is too high try to change the learning rate
         for epoch in pbar:
             loss = train_loop(train_loader, optimizer, criterion_train, model, average_seq_len, clip=clip)
-            
-
             if epoch % 1 == 0:
-
                 if epoch % 5 == 0 :
                     if (lr *0.75) < 1.5 :
                         lr = 1.5
                     else:
                         lr = lr * 0.75
-
                 sampled_epochs.append(epoch)
                 losses_train.append(np.asarray(loss).mean())
-
                 if isinstance(optimizer,torch.optim.ASGD):
                     tmp = {}
                     for prm in model.parameters():
                         tmp[prm] = prm.data.clone()
                         prm.data = optimizer.state[prm]['ax'].clone()
-
-
                 ppl_dev, loss_dev = eval_loop(dev_loader, criterion_eval, model)
                 losses_dev.append(np.asarray(loss_dev).mean())
                 pbar.set_description("PPL: %f" % ppl_dev)
