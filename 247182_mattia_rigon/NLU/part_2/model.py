@@ -14,11 +14,14 @@ class JointIntentSlotsBert(nn.Module):
     def forward(self,inputs):
 
         bert_output = self.bert_model(**inputs)
-        intent_output = bert_output.last_hidden_state[:,0,:] # pooler_output
         sequence_output = bert_output.last_hidden_state  
+        intent_output = bert_output.pooler_output
 
-        intent_output = self.intent_out(intent_output)
-        slot_output = self.slot_out(sequence_output)
+        drop_slot = self.dropout(sequence_output)
+        drop_intent = self.dropout(intent_output)
+        
+        slot_output = self.slot_out(drop_slot)
+        intent_output = self.intent_out(drop_intent)
 
         slot_output = slot_output.permute(0,2,1)
 
