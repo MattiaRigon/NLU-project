@@ -1,0 +1,8 @@
+LR = 5
+hid_size = 400
+emb_size=400
+optimizer=<class 'torch.optim.sgd.SGD'>
+model=<class 'model.LSTM'>
+emb_dropout=0.6
+out_dropout=0.6
+Test ppl:  145.11398484266564 + Epochs: 48/100 

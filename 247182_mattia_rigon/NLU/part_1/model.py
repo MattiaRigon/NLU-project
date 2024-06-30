@@ -4,20 +4,18 @@ from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 class ModelIAS(nn.Module):
 
-    def __init__(self, hid_size, out_slot, out_int, emb_size, vocab_len, n_layer=1, pad_index=0):
+    def __init__(self, hid_size, out_slot, out_int, emb_size, vocab_len, dropout, n_layer=1, pad_index=0):
         super(ModelIAS, self).__init__()
         # hid_size = Hidden size
         # out_slot = number of slots (output size for slot filling)
         # out_int = number of intents (output size for intent class)
         # emb_size = word embedding size
-        
         self.embedding = nn.Embedding(vocab_len, emb_size, padding_idx=pad_index)
         
         self.utt_encoder = nn.LSTM(emb_size, hid_size, n_layer, bidirectional=True, batch_first=True)    
-        self.slot_out = nn.Linear(2 * hid_size, out_slot)  # Update from 200 to 400
-        self.intent_out = nn.Linear(2 * hid_size, out_int)  # Update from 200 to 400
-        # Dropout layer How/Where do we apply it?
-        self.dropout = nn.Dropout(0.1)
+        self.slot_out = nn.Linear(2 * hid_size, out_slot)  
+        self.intent_out = nn.Linear(2 * hid_size, out_int)  
+        self.dropout = nn.Dropout(dropout)
         
     def forward(self, utterance, seq_lengths):
         # utterance.size() = batch_size X seq_len

@@ -22,7 +22,6 @@ if __name__ == "__main__":
     parser.add_argument('--test',action='store_true', help='If test enabled just evaluate the model with model.pth, otherwise train')
     args = parser.parse_args()
     # Dataloader instantiation
-    # You can reduce the batch_size if the GPU memory is not enough
     tmp_train_raw = load_data(os.path.join(LOCAL_PATH,'dataset','ATIS','train.json'))
     test_raw = load_data(os.path.join(LOCAL_PATH,'dataset','ATIS','test.json'))
 
@@ -61,7 +60,7 @@ if __name__ == "__main__":
 
     lang = Lang(words, intents, slots, cutoff=0)
 
-    if args.test:
+    if True:
         saved_model = torch.load(os.path.join(LOCAL_PATH,'bin','model.pth'))
         lang.word2id = saved_model['word2id']
         lang.slot2id = saved_model['slot2id']
@@ -93,12 +92,12 @@ if __name__ == "__main__":
     accuracy_history = []
     best_f1 = 0
     best_model = None
-
+    dropout = 0.5
     runs = 5
     slot_f1s, intent_acc = [], []
 
     if args.test:
-        model = ModelIAS(hid_size, out_slot, out_int, emb_size, vocab_len, pad_index=PAD_TOKEN).to(DEVICE)
+        model = ModelIAS(hid_size, out_slot, out_int, emb_size, vocab_len, dropout, pad_index=PAD_TOKEN).to(DEVICE)
         model.apply(init_weights)
         model.load_state_dict(saved_model['model'])
         criterion_slots = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN)
@@ -110,7 +109,7 @@ if __name__ == "__main__":
 
         for x in tqdm(range(0, runs)):
 
-            model = ModelIAS(hid_size, out_slot, out_int, emb_size, vocab_len, pad_index=PAD_TOKEN).to(DEVICE)
+            model = ModelIAS(hid_size, out_slot, out_int, emb_size, vocab_len, dropout,pad_index=PAD_TOKEN).to(DEVICE)
             model.apply(init_weights)
             optimizer = optim.Adam(model.parameters(), lr=lr)
             criterion_slots = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN)
@@ -147,7 +146,7 @@ if __name__ == "__main__":
         slot_f1s = np.asarray(slot_f1s)
         intent_acc = np.asarray(intent_acc)
         print('Slot F1', round(slot_f1s.mean(),3), '+-', round(slot_f1s.std(),3))
-        print('Intent Acc', round(intent_acc.mean(), 3), '+-', round(slot_f1s.std(), 3))
+        print('Intent Acc', round(intent_acc.mean(), 3), '+-', round(intent_acc.std(), 3))
 
         configurations = dict()
         configurations['lr'] = lr
@@ -159,13 +158,14 @@ if __name__ == "__main__":
         configurations['patience'] = patience
         configurations['clip'] = clip
         configurations['runs'] = runs
+        configurations['dropout'] = dropout
 
         results = dict()
         results['configurations'] = configurations
         results['slot_f1s_mean'] = round(slot_f1s.mean(),3)
         results['slot_f1s_std'] = round(slot_f1s.std(),3)
         results['intent_acc_mean'] = round(intent_acc.mean(), 3)
-        results['intent_acc_std'] = round(slot_f1s.std(), 3)
+        results['intent_acc_std'] = round(intent_acc.std(), 3)
         results['slot_f1s'] = slot_f1s
         results['intent_acc'] = intent_acc
         results['sampled_epochs'] = sampled_epochs
