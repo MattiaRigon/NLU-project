@@ -28,9 +28,9 @@ if __name__ == "__main__":
     batch_train = 20
     batch_dev_test = 80
 
-    train_raw = read_file("dataset/PennTreeBank/ptb.train.txt")
-    dev_raw = read_file("dataset/PennTreeBank/ptb.valid.txt")
-    test_raw = read_file("dataset/PennTreeBank/ptb.test.txt")
+    train_raw = read_file(os.path.join(LOCAL_PATH,"dataset/PennTreeBank/ptb.train.txt"))
+    dev_raw = read_file(os.path.join(LOCAL_PATH,"dataset/PennTreeBank/ptb.valid.txt"))
+    test_raw = read_file(os.path.join(LOCAL_PATH,"dataset/PennTreeBank/ptb.test.txt"))
 
     lang = Lang(train_raw, ["<pad>", "<eos>"])
 
@@ -53,10 +53,7 @@ if __name__ == "__main__":
     nonMono = 5
     wdecay = 1.2e-6
 
-    # Don't forget to experiment with a lower training batch size
-    # Increasing the back propagation steps can be seen as a regularization step
-
-    lr = 10 # This is definitely not good for SGD
+    lr = 10 
     clip = 5 # Clip the gradient
     device = 'cuda:0'
 
@@ -112,7 +109,8 @@ if __name__ == "__main__":
                     patience -= 1
 
                 if isinstance(optimizer,torch.optim.ASGD):
-                    prm.data = tmp[prm].clone()
+                    for prm in model.parameters():
+                        prm.data = tmp[prm].clone()
 
                 if patience <= 0: # Early stopping with patience
                     if isinstance(optimizer,torch.optim.SGD):
