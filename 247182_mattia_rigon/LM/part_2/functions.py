@@ -7,7 +7,22 @@ import time
 import numpy as np
 import copy
 
-def train_loop(data, optimizer, criterion, model, average_seq_len,clip=5):
+def train_loop(data, optimizer, criterion, model, average_seq_len, clip=5):
+    """
+    Trains the model using the provided data.
+
+    Args:
+        data (iterable): The training data.
+        optimizer (torch.optim.Optimizer): The optimizer used for training.
+        criterion (torch.nn.Module): The loss function used for training.
+        model (torch.nn.Module): The model to be trained.
+        average_seq_len (float): The average sequence length in the training data.
+        clip (float, optional): The maximum gradient norm for gradient clipping. Defaults to 5.
+
+    Returns:
+        float: The average loss per token during training.
+    """
+
     model.train()
     loss_array = []
     number_of_tokens = []
@@ -15,21 +30,33 @@ def train_loop(data, optimizer, criterion, model, average_seq_len,clip=5):
 
     for sample in data:
         seq_len = sample['source'].shape[1]
-        seq_len_adjusted_lr = original_lr * (seq_len / average_seq_len)  # average_seq_len deve essere definito o calcolato
-        optimizer.param_groups[0]['lr'] = seq_len_adjusted_lr  # Impostare il learning rate modificato
-        optimizer.zero_grad() # Zeroing the gradient
+        seq_len_adjusted_lr = original_lr * (seq_len / average_seq_len) # Adjust the learning rate based on the sequence length
+        optimizer.param_groups[0]['lr'] = seq_len_adjusted_lr # Update the learning rate
+        optimizer.zero_grad()
         output = model(sample['source'])
         loss = criterion(output, sample['target'])
         loss_array.append(loss.item() * sample["number_tokens"])
         number_of_tokens.append(sample["number_tokens"])
-        loss.backward() # Compute the gradient, deleting the computational graph
-        torch.nn.utils.clip_grad_norm_(model.parameters(), clip) # clip the gradient to avoid explosioning gradients
-        optimizer.step() # Update the weights
-        optimizer.param_groups[0]['lr'] = original_lr  # Ripristinare il learning rate originale
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
+        optimizer.step()
+        optimizer.param_groups[0]['lr'] = original_lr # Reset the learning rate
 
-    return sum(loss_array)/sum(number_of_tokens)
+    return sum(loss_array) / sum(number_of_tokens)
 
 def eval_loop(data, eval_criterion, model):
+    """
+    Evaluate the model on the given data using the specified evaluation criterion.
+
+    Args:
+        data (iterable): The data to evaluate the model on.
+        eval_criterion (callable): The evaluation criterion function.
+        model: The model to evaluate.
+
+    Returns:
+        tuple: A tuple containing the perplexity (ppl) and the average loss (loss_to_return).
+    """
+
     model.eval()
     loss_to_return = []
     loss_array = []
@@ -46,6 +73,17 @@ def eval_loop(data, eval_criterion, model):
     return ppl, loss_to_return
 
 def init_weights(mat):
+    """
+    Initializes the weights of the given module using Xavier initialization for recurrent layers (GRU, LSTM, RNN)
+    and uniform initialization for linear layers.
+
+    Args:
+        mat (nn.Module): The module for which to initialize the weights.
+
+    Returns:
+        None
+    """
+    
     for m in mat.modules():
         if type(m) in [nn.GRU, nn.LSTM, nn.RNN]:
             for name, param in m.named_parameters():
@@ -159,17 +197,24 @@ def save_plot_ppl(sampled_epochs, ppl_history, path):
 
 
 def calculate_average_seq_len(data_loader):
+    """
+    Calculates the average sequence length of the input sequences in a data loader.
+
+    Args:
+        data_loader (torch.utils.data.DataLoader): The data loader containing the input sequences.
+
+    Returns:
+        float: The average sequence length.
+
+    """
     total_length = 0
     count = 0
     
     for batch in data_loader:
-        # Assumiamo che `batch` sia un dizionario con le chiavi 'source' e 'target'
-        # dove 'source' è il tensore contenente le sequenze di input
-        batch_seq_lengths = batch['source'].shape[1]  # Prendi la dimensione della sequenza, assumendo che le sequenze siano allineate sulla seconda dimensione
-        
-        total_length += batch_seq_lengths * batch['source'].shape[0]  # Moltiplica la lunghezza della sequenza per il numero di elementi nel batch
-        count += batch['source'].shape[0]  # Conta il numero totale di sequenze
+        batch_seq_lengths = batch['source'].shape[1]  # Get the sequence length of the batch
+        total_length += batch_seq_lengths * batch['source'].shape[0] 
+        count += batch['source'].shape[0]  
     
-    # Calcola la lunghezza media delle sequenze
+    # Calculate the average sequence length
     average_seq_len = total_length / count if count != 0 else 0
     return average_seq_len

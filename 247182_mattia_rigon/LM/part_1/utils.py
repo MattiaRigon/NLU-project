@@ -7,6 +7,16 @@ from functools import partial
 DEVICE = 'cuda:0' 
 
 def read_file(path, eos_token="<eos>"):
+    """
+    Read the contents of a file and return a list of lines with an end-of-sentence token appended to each line.
+
+    Args:
+        path (str): The path to the file to be read.
+        eos_token (str, optional): The end-of-sentence token to be appended to each line. Defaults to "<eos>".
+
+    Returns:
+        list: A list of lines from the file with the end-of-sentence token appended to each line.
+    """
     output = []
     with open(path, "r") as f:
         for line in f.readlines():
