@@ -60,11 +60,14 @@ if __name__ == "__main__":
 
     lang = Lang(words, intents, slots, cutoff=0)
 
-    if True:
+    if args.test:
         saved_model = torch.load(os.path.join(LOCAL_PATH,'bin','model.pth'))
         lang.word2id = saved_model['word2id']
         lang.slot2id = saved_model['slot2id']
         lang.intent2id = saved_model['intent2id']
+        lang.id2word = {v:k for k, v in lang.word2id.items()}
+        lang.id2slot = {v:k for k, v in lang.slot2id.items()}
+        lang.id2intent = {v:k for k, v in lang.intent2id.items()}
 
     train_dataset = IntentsAndSlots(train_raw, lang)
     dev_dataset = IntentsAndSlots(dev_raw, lang)
