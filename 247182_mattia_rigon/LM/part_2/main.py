@@ -13,13 +13,14 @@ from functools import partial
 from model import LSTM
 import numpy as np
 import argparse
-LOCAL_PATH = os.path.dirname(os.path.abspath(__file__))
+import sys
 
+LOCAL_PATH = os.path.dirname(os.path.abspath(__file__))
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Test application")
-    parser.add_argument('--test',action='store_true', help='If test enabled just evaluate the model with model.pth, otherwise train')
+    parser.add_argument('--test',type=str, help='If test enabled just evaluate the model with model.pth, otherwise train')
     args = parser.parse_args()
 
     # Dataloader instantiation
@@ -75,7 +76,11 @@ if __name__ == "__main__":
     best_ppl = math.inf
     best_model = None
     if args.test:
-        saved_model = torch.load(os.path.join(LOCAL_PATH,'bin','model.pth'))
+        try:
+            saved_model = torch.load(os.path.join(LOCAL_PATH,'bin',args.test))
+        except Exception as e:
+            print(f"Error occured reading the weights: {e}.")
+            sys.exit(1)
         model.load_state_dict(saved_model)
         final_ppl,  _ = eval_loop(test_loader, criterion_eval, model)
         print('Test ppl: ', final_ppl)
