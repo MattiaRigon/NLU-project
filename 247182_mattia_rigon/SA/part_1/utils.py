@@ -93,7 +93,9 @@ class Slots(data.Dataset):
         slot_ids = []
         utt_ids = []
         for sentence,slots_row in zip(sentences,slots):
+            # Add the PAD token
             tokenize_slots = [PAD_TOKEN]
+            # Add the CLS token
             sentence_id = [101]
             for word,slot in zip(sentence,slots_row):
                 tokens = self.bert_tokenizer([word])['input_ids'][0]
@@ -102,8 +104,9 @@ class Slots(data.Dataset):
                 tokenize_slots.append(slot)
                 # Add padding for each subtoken except the first one
                 tokenize_slots.extend([PAD_TOKEN] * (len(tokens) -1))
-
+            # Add the SEP token
             sentence_id.append(102)
+            # Add the PAD token
             tokenize_slots.append(PAD_TOKEN)
             utt_ids.append(sentence_id)
             slot_ids.append(tokenize_slots)
