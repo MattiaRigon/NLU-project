@@ -12,6 +12,7 @@ from model import ModelIAS
 import numpy as np
 import torch.optim as optim
 import argparse
+import sys
 
 LOCAL_PATH = os.path.dirname(os.path.abspath(__file__))
 saved_model = None
@@ -19,7 +20,7 @@ saved_model = None
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Test application")
-    parser.add_argument('--test',action='store_true', help='If test enabled just evaluate the model with model.pth, otherwise train')
+    parser.add_argument('--test',type=str, help='If test enabled just evaluate the model with model.pth, otherwise train')
     args = parser.parse_args()
     # Dataloader instantiation
     tmp_train_raw = load_data(os.path.join(LOCAL_PATH,'dataset','ATIS','train.json'))
@@ -61,7 +62,11 @@ if __name__ == "__main__":
     lang = Lang(words, intents, slots, cutoff=0)
 
     if args.test:
-        saved_model = torch.load(os.path.join(LOCAL_PATH,'bin','model.pth'))
+        try:
+            saved_model = torch.load(os.path.join(LOCAL_PATH,'bin',args.test))
+        except Exception as e:
+            print(f"Error occured reading the weights: {e}.")
+            sys.exit(1)
         lang.word2id = saved_model['word2id']
         lang.slot2id = saved_model['slot2id']
         lang.intent2id = saved_model['intent2id']

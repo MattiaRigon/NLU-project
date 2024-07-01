@@ -21,7 +21,7 @@ saved_model = None
 if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="Test application")
-    parser.add_argument('--test',action='store_true', help='If test enabled just evaluate the model with model.pth, otherwise train')
+    parser.add_argument('--test',type=str, help='If test enabled just evaluate the model with model.pth, otherwise train')
     args = parser.parse_args()
     # Load the data
     device = 'cuda:0'
@@ -63,10 +63,17 @@ if __name__ == "__main__":
     lang = Lang(words, intents, slots, cutoff=0)
 
     if args.test:
-        saved_model = torch.load(os.path.join(LOCAL_PATH,'bin','model.pth'))
+        try:
+            saved_model = torch.load(os.path.join(LOCAL_PATH,'bin',args.test))
+        except Exception as e:
+            print(f"Error occured reading the weights: {e}.")
+            sys.exit(1)
         lang.word2id = saved_model['word2id']
         lang.slot2id = saved_model['slot2id']
         lang.intent2id = saved_model['intent2id']
+        lang.id2word = {v:k for k, v in lang.word2id.items()}
+        lang.id2slot = {v:k for k, v in lang.slot2id.items()}
+        lang.id2intent = {v:k for k, v in lang.intent2id.items()}
 
     train_dataset = IntentsAndSlots(train_raw, lang)
     dev_dataset = IntentsAndSlots(dev_raw, lang)
@@ -78,14 +85,14 @@ if __name__ == "__main__":
     dev_loader = DataLoader(dev_dataset, batch_size=64, collate_fn=lambda x: collate_fn(x))
     test_loader = DataLoader(test_dataset, batch_size=64, collate_fn=lambda x: collate_fn(x))
 
-    lr = 0.00005 # learning rate
+    lr = 0.0001 # learning rate
     clip = 5 # Clip the gradient
 
     out_slot = len(lang.slot2id)
     out_int = len(lang.intent2id)
     vocab_len = len(lang.word2id)
     config = BertConfig.from_pretrained('bert-base-uncased')
-    model = JointIntentSlotsBert(config=config,out_slot=out_slot, out_int=out_int, dropout=0.1)
+    model = JointIntentSlotsBert(config=config,out_slot=out_slot, out_int=out_int, dropout=0.4)
     model.to(device)
     model.apply(init_weights)
 
