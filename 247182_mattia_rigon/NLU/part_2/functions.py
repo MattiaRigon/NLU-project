@@ -14,42 +14,22 @@ from utils import Lang
 
 PAD_TOKEN = 0
 
-def post_process_model(intent_logits,slot_logits,intent_label_ids, slot_labels_ids,attention_mask,num_intent_labels,num_slot_labels,ignore_index,outputs):
-    slot_loss_coef = 1
-    total_loss = 0
-    # 1. Intent Softmax
-    if intent_label_ids is not None:
-        if num_intent_labels == 1:
-            intent_loss_fct = nn.MSELoss()
-            intent_loss = intent_loss_fct(intent_logits.view(-1), intent_label_ids.view(-1))
-        else:
-            intent_loss_fct = nn.CrossEntropyLoss()
-            intent_loss = intent_loss_fct(intent_logits.view(-1, num_intent_labels), intent_label_ids.view(-1))
-        total_loss += intent_loss
-
-    # 2. Slot Softmax
-    if slot_labels_ids is not None:
-
-        slot_loss_fct = nn.CrossEntropyLoss(ignore_index=ignore_index)
-        # Only keep active parts of the loss
-        if attention_mask is not None:
-            active_loss = attention_mask.view(-1) == 1
-            active_logits = slot_logits.view(-1, num_slot_labels)[active_loss]
-            active_labels = slot_labels_ids.view(-1)[active_loss]
-            slot_loss = slot_loss_fct(active_logits, active_labels)
-        else:
-            slot_loss = slot_loss_fct(slot_logits.view(-1, num_slot_labels), slot_labels_ids.view(-1))
-        total_loss += slot_loss_coef * slot_loss
-
-    outputs = ((intent_logits, slot_logits),) + outputs[2:]  # add hidden states and attention if they are here
-
-    # outputs = (total_loss,) + outputs
-
-    return total_loss, outputs
-
-
-
 def train_loop(data, optimizer, criterion_slots, criterion_intents, model ,clip=5):
+    """
+    Trains the model using the provided data and optimization parameters.
+
+    Args:
+        data (list): A list of samples containing utterances, intents, and slots.
+        optimizer: The optimizer used for updating the model's weights.
+        criterion_slots: The criterion used for calculating the slot loss.
+        criterion_intents: The criterion used for calculating the intent loss.
+        model: The model to be trained.
+        clip (float, optional): The maximum gradient norm for gradient clipping. Defaults to 5.
+
+    Returns:
+        list: A list of loss values for each training sample.
+    """
+    
     model.train()
     loss_array = []
     for sample in data:
@@ -59,7 +39,6 @@ def train_loop(data, optimizer, criterion_slots, criterion_intents, model ,clip=
         loss_intent = criterion_intents(intents, sample['intents'])
         loss_slot = criterion_slots(slots, sample['y_slots'])
         loss = loss_intent + loss_slot # In joint training we sum the losses. 
-                                       # Is there another way to do that?
         loss_array.append(loss.item())
         loss.backward() # Compute the gradient, deleting the computational graph
         # clip the gradient to avoid exploding gradients
@@ -68,6 +47,22 @@ def train_loop(data, optimizer, criterion_slots, criterion_intents, model ,clip=
     return loss_array
 
 def eval_loop(data, criterion_slots, criterion_intents, model, lang : Lang, bert_tokenizer):
+
+    """
+    Evaluate the performance of a model on a given dataset.
+
+    Args:
+        data (list): List of samples to evaluate the model on.
+        criterion_slots: Criterion for calculating the loss of slot predictions.
+        criterion_intents: Criterion for calculating the loss of intent predictions.
+        model: The model to evaluate.
+        lang (Lang): Language object containing mappings for intents and slots.
+        bert_tokenizer: BERT tokenizer for converting token IDs to tokens.
+
+    Returns:
+        tuple: A tuple containing the evaluation results, intent classification report, and loss array.
+    """
+    
     model.eval()
     loss_array = []
     
@@ -76,11 +71,10 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang : Lang, bert
     
     ref_slots = []
     hyp_slots = []
-    #softmax = nn.Softmax(dim=1) # Use Softmax if you need the actual probability
-    with torch.no_grad(): # It used to avoid the creation of computational graph
+    with torch.no_grad(): # Avoid computing the gradient
         for sample in data:
+            # Forward pass
             slots, intents = model(sample['utterances'])
-            
             loss_intent = criterion_intents(intents, sample['intents'])
             loss_slot = criterion_slots(slots, sample['y_slots'])
             loss = loss_intent + loss_slot 
@@ -96,38 +90,37 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang : Lang, bert
             # Slot inference 
             output_slots = torch.argmax(slots, dim=1)
             for id_seq, seq in enumerate(output_slots):
-                # length = sample['slots_len'].tolist()[id_seq]
-                # utt_ids = sample['utterance'][id_seq][:length].split(" ")
-
+                # Get the tokens of the utterance
                 utterance = bert_tokenizer.convert_ids_to_tokens(sample['utterances']['input_ids'][id_seq])
-                # utterance = [u for u in utterance if u not in ['[CLS]','[SEP]','[PAD]']]
-                length =  len(utterance)# torch.sum(sample['utterances']['attention_mask'][0] == 1).item() - 2 
-                
+                length =  len(utterance)
+                # Get the ground truth slots ids and convert them to slots
                 gt_ids = sample['y_slots'][id_seq].tolist()
                 gt_slots = [lang.id2slot[elem] for elem in gt_ids[:length]]
-                            
+                # Get the predicted slots ids and convert them to slots
                 to_decode = seq[:length].tolist()
+                # We need to delete the indexes of the special tokens
                 delete_indexes = []
+                # We do not want to consider the special tokens
                 not_accepted_values = ['pad','[CLS]','[SEP]']
-
+                # Get the indexes of the special tokens
                 for i,item in  enumerate(gt_slots):
                     if item in not_accepted_values:
                         delete_indexes.append(i)
-
-
+                # Remove the special tokens from the ground truth slots
                 ref_slots.append([(utterance[id_el], gt_slots[id_el]) for id_el, elem in enumerate(utterance) if gt_slots[id_el] not in not_accepted_values ])
 
                 tmp_seq = []
                 for id_el, elem in enumerate(to_decode):
                     tmp_seq.append((utterance[id_el], lang.id2slot[elem]))
                 real_tmp_slots = []
-
+                # Remove the special tokens from the predicted slots
                 for i,slot in enumerate(tmp_seq):
                     if i not in delete_indexes:
                         real_tmp_slots.append(slot)
-
+                # Append the predicted slots
                 hyp_slots.append(real_tmp_slots)
     try:            
+        # Evaluate the model for slot filling
         results = evaluate(ref_slots, hyp_slots)
     except Exception as ex:
         # Sometimes the model predicts a class that is not in REF
@@ -136,12 +129,23 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang : Lang, bert
         hyp_s = set([x[1] for x in hyp_slots])
         print(hyp_s.difference(ref_s))
         results = {"total":{"f":0}}
-        
+    # Evaluate the model for intent classification
     report_intent = classification_report(ref_intents, hyp_intents, 
                                           zero_division=False, output_dict=True)
     return results, report_intent, loss_array
 
 def init_weights(mat):
+    """
+    Initializes the weights of the given module using Xavier initialization for linear layers
+    and orthogonal initialization for recurrent layers.
+
+    Args:
+        mat (nn.Module): The module for which to initialize the weights.
+
+    Returns:
+        None
+    """
+
     for n, m in mat.named_modules():
         if type(m) in [nn.GRU, nn.LSTM, nn.RNN]:
             for name, param in m.named_parameters():
@@ -162,14 +166,20 @@ def init_weights(mat):
                     if m.bias != None:
                         m.bias.data.fill_(0.01)
 
-def save_model_incrementally(model, sampled_epochs, losses_train, losses_dev, accuracy_history, results,model_name='model.pth'):
+def save_model_incrementally(model, sampled_epochs, losses_train, losses_dev, accuracy_history, results, model_name='model.pth'):
     """
-    Saves a PyTorch model in an incrementally named test folder within a results directory.
+    Save the model and related information incrementally.
 
     Args:
-    - model (torch.nn.Module): The PyTorch model to save.
-    - model_name (str, optional): The name of the saved model file. Default is 'model.pth'.
+        model (torch.nn.Module): The model to be saved.
+        sampled_epochs (list): List of sampled epochs.
+        losses_train (list): List of training losses.
+        losses_dev (list): List of development losses.
+        accuracy_history (list): List of accuracy history.
+        results (str): Results to be saved.
+        model_name (str, optional): Name of the model file. Defaults to 'model.pth'.
     """
+
     results_dir = 'results'
     os.makedirs(results_dir, exist_ok=True)
 
@@ -194,7 +204,19 @@ def save_model_incrementally(model, sampled_epochs, losses_train, losses_dev, ac
     print(f'Model saved to {model_path}')
     
 
-def save_plot_losses(sampled_epochs,losses_train,losses_dev,path):
+def save_plot_losses(sampled_epochs, losses_train, losses_dev, path):
+    """
+    Save a plot of training and validation losses.
+
+    Args:
+        sampled_epochs (list): List of sampled epochs.
+        losses_train (list): List of training losses.
+        losses_dev (list): List of validation losses.
+        path (str): Path to save the plot.
+
+    Returns:
+        None
+    """
 
     plt.figure(figsize=(10, 6)) 
 
@@ -209,18 +231,29 @@ def save_plot_losses(sampled_epochs,losses_train,losses_dev,path):
     plt.grid(True)  
     plt.tight_layout()  
 
-    plt.savefig(os.path.join(path,"losses.png")) 
+    plt.savefig(os.path.join(path, "losses.png"))
 
-def save_plot_accuracy(sampled_epochs,accuracy_history,path):
+def save_plot_accuracy(sampled_epochs, accuracy_history, path):
+    """
+    Save a plot of accuracy history.
 
-    plt.figure(figsize=(10, 6)) 
-    plt.plot(sampled_epochs, accuracy_history, label='accuracy', marker='o')  
-    plt.title('PPL')  
-    plt.xlabel('Epochs')  
-    plt.ylabel('Loss')  
-    plt.legend() 
+    Args:
+        sampled_epochs (list): List of sampled epochs.
+        accuracy_history (list): List of accuracy values.
+        path (str): Path to save the plot.
 
-    plt.grid(True) 
-    plt.tight_layout()  
+    Returns:
+        None
+    """
 
-    plt.savefig(os.path.join(path,"accuracy.png")) 
+    plt.figure(figsize=(10, 6))
+    plt.plot(sampled_epochs, accuracy_history, label='accuracy', marker='o')
+    plt.title('PPL')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+
+    plt.grid(True)
+    plt.tight_layout()
+
+    plt.savefig(os.path.join(path, "accuracy.png"))

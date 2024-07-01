@@ -18,16 +18,16 @@ LOCAL_PATH = os.path.dirname(os.path.abspath(__file__))
 saved_model = None
 
 if __name__ == "__main__":
-
+    # Parse the arguments
     parser = argparse.ArgumentParser(description="Test application")
     parser.add_argument('--test',type=str, help='If test enabled just evaluate the model with model.pth, otherwise train')
     args = parser.parse_args()
     # Dataloader instantiation
     tmp_train_raw = load_data(os.path.join(LOCAL_PATH,'dataset','ATIS','train.json'))
     test_raw = load_data(os.path.join(LOCAL_PATH,'dataset','ATIS','test.json'))
-
+    # Define the portion of the validation set
     portion = 0.10
-
+    # Stratify the data
     intents = [x['intent'] for x in tmp_train_raw] # We stratify on intents
     count_y = Counter(intents) # like a dict with intent:frequency
 
@@ -58,9 +58,9 @@ if __name__ == "__main__":
                                             # however this depends on the research purpose
     slots = set(sum([line['slots'].split() for line in corpus],[]))
     intents = set([line['intent'] for line in corpus])
-
+    # Create the language object
     lang = Lang(words, intents, slots, cutoff=0)
-
+    # if test argument is passed, we load the model and the lang object
     if args.test:
         try:
             saved_model = torch.load(os.path.join(LOCAL_PATH,'bin',args.test))
@@ -73,21 +73,19 @@ if __name__ == "__main__":
         lang.id2word = {v:k for k, v in lang.word2id.items()}
         lang.id2slot = {v:k for k, v in lang.slot2id.items()}
         lang.id2intent = {v:k for k, v in lang.intent2id.items()}
-
+    # Create the datasets
     train_dataset = IntentsAndSlots(train_raw, lang)
     dev_dataset = IntentsAndSlots(dev_raw, lang)
     test_dataset = IntentsAndSlots(test_raw, lang)
-
+    # Create the dataloaders
     train_loader = DataLoader(train_dataset, batch_size=128, collate_fn=collate_fn,  shuffle=True)
     dev_loader = DataLoader(dev_dataset, batch_size=64, collate_fn=collate_fn)
     test_loader = DataLoader(test_dataset, batch_size=64, collate_fn=collate_fn)
-    
+    # Define the model hyperparameters
     hid_size = 350
     emb_size = 350
-
     lr = 0.0001 # learning rate
     clip = 5 # Clip the gradient
-
     out_slot = len(lang.slot2id)
     out_int = len(lang.intent2id)
     vocab_len = len(lang.word2id)
@@ -103,7 +101,7 @@ if __name__ == "__main__":
     dropout = 0.5
     runs = 5
     slot_f1s, intent_acc = [], []
-
+    # If test argument is passed, we evaluate the model
     if args.test:
         model = ModelIAS(hid_size, out_slot, out_int, emb_size, vocab_len, dropout, pad_index=PAD_TOKEN).to(DEVICE)
         model.apply(init_weights)
@@ -113,10 +111,9 @@ if __name__ == "__main__":
         results_test, intent_test, _ = eval_loop(test_loader, criterion_slots, criterion_intents, model, lang)
         print('Slot F1', results_test['total']['f'])
         print('Intent Acc',intent_test['accuracy'])
+    #  Otherwise we train the model
     else:
-
         for x in tqdm(range(0, runs)):
-
             model = ModelIAS(hid_size, out_slot, out_int, emb_size, vocab_len, dropout,pad_index=PAD_TOKEN).to(DEVICE)
             model.apply(init_weights)
             optimizer = optim.Adam(model.parameters(), lr=lr)
@@ -135,7 +132,7 @@ if __name__ == "__main__":
                     losses_dev.append(np.asarray(loss_dev).mean())
                     f1 = results_dev['total']['f']
                     accuracy_history.append(intent_res['accuracy'])
-
+                    # search for the best model
                     if f1 > best_f1:
                         best_f1 = f1
                         best_model = copy.deepcopy(model).to('cpu')
@@ -150,12 +147,12 @@ if __name__ == "__main__":
             intent_acc.append(intent_test['accuracy'])
             slot_f1s.append(results_test['total']['f'])
             sampled_epochs.append(_sampled_epochs)
-
+        # Print the results
         slot_f1s = np.asarray(slot_f1s)
         intent_acc = np.asarray(intent_acc)
         print('Slot F1', round(slot_f1s.mean(),3), '+-', round(slot_f1s.std(),3))
         print('Intent Acc', round(intent_acc.mean(), 3), '+-', round(intent_acc.std(), 3))
-
+        # Save the configurations
         configurations = dict()
         configurations['lr'] = lr
         configurations['hid_size'] = hid_size
@@ -167,7 +164,7 @@ if __name__ == "__main__":
         configurations['clip'] = clip
         configurations['runs'] = runs
         configurations['dropout'] = dropout
-
+        # Save the results
         results = dict()
         results['configurations'] = configurations
         results['slot_f1s_mean'] = round(slot_f1s.mean(),3)
@@ -180,7 +177,7 @@ if __name__ == "__main__":
         results['losses_train'] = losses_train
         results['losses_dev'] = losses_dev
         results['accuracy_history'] = accuracy_history
-
+        # Save the model
         saving_model = {"epoch": sampled_epochs[-1], 
             "model": best_model.state_dict(), 
             "optimizer": optimizer.state_dict(), 
@@ -188,5 +185,5 @@ if __name__ == "__main__":
             "slot2id": lang.slot2id, 
             "intent2id": lang.intent2id 
         }
-
+        # Save the model incrementally
         save_model_incrementally(saving_model,sampled_epochs,losses_train,losses_dev,accuracy_history,results)

@@ -15,11 +15,13 @@ from tqdm import tqdm
 from model import JointIntentSlotsBert
 import copy
 import argparse
+import sys
 
 LOCAL_PATH = os.path.dirname(os.path.abspath(__file__))
 saved_model = None
+
 if __name__ == "__main__":
-    
+    # Parse the arguments
     parser = argparse.ArgumentParser(description="Test application")
     parser.add_argument('--test',type=str, help='If test enabled just evaluate the model with model.pth, otherwise train')
     args = parser.parse_args()
@@ -61,7 +63,7 @@ if __name__ == "__main__":
     intents = set([line['intent'] for line in corpus])
 
     lang = Lang(words, intents, slots, cutoff=0)
-
+    # if we are testing we load the model saved
     if args.test:
         try:
             saved_model = torch.load(os.path.join(LOCAL_PATH,'bin',args.test))
@@ -74,17 +76,17 @@ if __name__ == "__main__":
         lang.id2word = {v:k for k, v in lang.word2id.items()}
         lang.id2slot = {v:k for k, v in lang.slot2id.items()}
         lang.id2intent = {v:k for k, v in lang.intent2id.items()}
-
+    # Create the datasets
     train_dataset = IntentsAndSlots(train_raw, lang)
     dev_dataset = IntentsAndSlots(dev_raw, lang)
     test_dataset = IntentsAndSlots(test_raw, lang)
-
+    # Instantiate the tokenizer
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-
+    # Create the dataloaders
     train_loader = DataLoader(train_dataset, batch_size=128, collate_fn=lambda x: collate_fn(x), shuffle=True)
     dev_loader = DataLoader(dev_dataset, batch_size=64, collate_fn=lambda x: collate_fn(x))
     test_loader = DataLoader(test_dataset, batch_size=64, collate_fn=lambda x: collate_fn(x))
-
+    # Define the model hyperparameters
     lr = 0.0001 # learning rate
     clip = 5 # Clip the gradient
 
@@ -95,7 +97,7 @@ if __name__ == "__main__":
     model = JointIntentSlotsBert(config=config,out_slot=out_slot, out_int=out_int, dropout=0.4)
     model.to(device)
     model.apply(init_weights)
-
+    # Define the optimizer and the loss functions
     optimizer = optim.Adam(model.parameters(), lr=lr)
     criterion_slots = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN)
     criterion_intents = nn.CrossEntropyLoss() # Because we do not have the pad token
@@ -107,7 +109,7 @@ if __name__ == "__main__":
     accuracy_history = []
     best_f1 = -1
     best_model = None
-
+    # If we are testing we evaluate the model
     if args.test:
         model.load_state_dict(saved_model['model'])
         results_test, intent_test, _ = eval_loop(test_loader, criterion_slots, criterion_intents, model, lang,tokenizer)
@@ -115,8 +117,8 @@ if __name__ == "__main__":
         intent_result = intent_test['accuracy']
         print('Slot F1: ',f1_result)
         print('Intent Accuracy:', intent_result)
+    # Otherwise we train the model
     else:
-
         for x in tqdm(range(1,n_epochs)):
             loss = train_loop(train_loader, optimizer, criterion_slots, 
                             criterion_intents, model, clip=clip)
@@ -145,7 +147,7 @@ if __name__ == "__main__":
         intent_result = intent_test['accuracy']
         print('Slot F1: ',f1_result)
         print('Intent Accuracy:', intent_result)
-
+        # Save the model
         saving_model = {"epoch": sampled_epochs[-1], 
                     "model": best_model.state_dict(), 
                     "optimizer": optimizer.state_dict(), 
@@ -155,5 +157,4 @@ if __name__ == "__main__":
 
         configurations = f'LR = {lr}\nhid_size = {config.hidden_size}\n\noptimizer={str(type(optimizer))}\nmodel={str(type(model))}\n'
         results_txt = f'{configurations}Intent Accuracy:  {intent_result}\nSlot F1: {f1_result}\nEpochs: {sampled_epochs[-1]}/{n_epochs} ' 
-
         save_model_incrementally(saving_model,sampled_epochs,losses_train,losses_dev,accuracy_history,results_txt)

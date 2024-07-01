@@ -100,6 +100,7 @@ class Slots(data.Dataset):
                 tokens = tokens[1:len(tokens)-1]
                 sentence_id.extend(tokens)
                 tokenize_slots.append(slot)
+                # Add padding for each subtoken except the first one
                 tokenize_slots.extend([PAD_TOKEN] * (len(tokens) -1))
 
             sentence_id.append(102)
@@ -135,7 +136,7 @@ def collate_fn(data):
     # We just need one length for packed pad seq, since len(utt) == len(slots)
     src_utt, _ = merge(new_item['sentence'])
     y_slots, y_lengths = merge(new_item["slots"])
-
+    # Create the attention mask
     attention_mask = torch.where(src_utt != 0, torch.tensor(1), torch.tensor(0))
     token_type_ids = torch.zeros_like(attention_mask)
 
@@ -144,7 +145,7 @@ def collate_fn(data):
     token_type_ids = token_type_ids.to(device)
     y_slots = y_slots.to(device)
     y_lengths = torch.LongTensor(y_lengths).to(device)
-
+    # Create the input for the model   
     input_bert = {
         "attention_mask": attention_mask,
         "input_ids": src_utt,

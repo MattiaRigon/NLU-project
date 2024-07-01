@@ -11,8 +11,17 @@ class JointIntentSlotsBert(nn.Module):
         self.intent_out = nn.Linear(config.hidden_size, out_int)  
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self,inputs):
+    def forward(self, inputs):
+        """
+        Forward pass of the model.
 
+        Args:
+            inputs (dict): Input dictionary containing the inputs for the BERT model.
+
+        Returns:
+            tuple: A tuple containing the slot output and intent output.
+
+        """
         bert_output = self.bert_model(**inputs)
         sequence_output = bert_output.last_hidden_state  
         intent_output = bert_output.pooler_output

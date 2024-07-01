@@ -93,6 +93,7 @@ class IntentsAndSlots (data.Dataset):
                 tokens = tokens[1:len(tokens)-1]
                 sentence_id.extend(tokens)
                 tokenize_slots.append(mapper[slot])
+                # Add padding for each subtoken except the first one
                 tokenize_slots.extend([PAD_TOKEN] * (len(tokens) -1))
 
             sentence_id.append(102)
@@ -129,23 +130,22 @@ def collate_fn(data):
     src_utt, _ = merge(new_item['utterance'])
     y_slots, y_lengths = merge(new_item["slots"])
     intent = torch.LongTensor(new_item["intent"])
-
+    # compute the attention mask and token type ids
     attention_mask = torch.where(src_utt != 0, torch.tensor(1), torch.tensor(0))
     token_type_ids = torch.zeros_like(attention_mask)
-
-    src_utt = src_utt.to(device) # We load the Tensor on our selected device
+    # Move the tensors to the selected device
+    src_utt = src_utt.to(device) 
     attention_mask = attention_mask.to(device)
     token_type_ids = token_type_ids.to(device)
     y_slots = y_slots.to(device)
     intent = intent.to(device)
     y_lengths = torch.LongTensor(y_lengths).to(device)
-
+    # Create the input for the model
     input_bert = {
         "attention_mask": attention_mask,
         "input_ids": src_utt,
         "token_type_ids" : token_type_ids
     }
-
     new_item["utterances"] = input_bert
     new_item["intents"] = intent
     new_item["y_slots"] = y_slots

@@ -12,6 +12,21 @@ import json
 
 
 def train_loop(data, optimizer, criterion_slots, criterion_intents, model, clip=5):
+    """
+    Trains the model using the provided data, optimizer, and loss criteria.
+
+    Args:
+        data (list): List of samples containing utterances, slots, intents, and slot lengths.
+        optimizer (torch.optim.Optimizer): Optimizer used to update the model's weights.
+        criterion_slots (torch.nn.Module): Loss criterion for slot prediction.
+        criterion_intents (torch.nn.Module): Loss criterion for intent prediction.
+        model (torch.nn.Module): Model to be trained.
+        clip (float, optional): Value used to clip the gradient to avoid exploding gradients. Defaults to 5.
+
+    Returns:
+        list: List of losses for each training sample.
+    """
+
     model.train()
     loss_array = []
     for sample in data:
@@ -29,6 +44,23 @@ def train_loop(data, optimizer, criterion_slots, criterion_intents, model, clip=
     return loss_array
 
 def eval_loop(data, criterion_slots, criterion_intents, model, lang):
+    """
+    Evaluate the performance of a model on a given dataset.
+
+    Args:
+        data (list): List of samples containing utterances, slots, and intents.
+        criterion_slots (torch.nn.Module): Criterion for slot classification loss.
+        criterion_intents (torch.nn.Module): Criterion for intent classification loss.
+        model (torch.nn.Module): Model to be evaluated.
+        lang (Language): Language object containing mapping between ids and tokens.
+
+    Returns:
+        tuple: A tuple containing the evaluation results, intent classification report, and loss array.
+
+    Raises:
+        Exception: If the model predicts a class that is not in the reference slots.
+
+    """
     model.eval()
     loss_array = []
     
@@ -37,27 +69,24 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang):
     
     ref_slots = []
     hyp_slots = []
-    #softmax = nn.Softmax(dim=1) # Use Softmax if you need the actual probability
-    with torch.no_grad(): # It used to avoid the creation of computational graph
+    
+    with torch.no_grad():
         for sample in data:
+            # Forward pass
             slots, intents = model(sample['utterances'], sample['slots_len'])
             loss_intent = criterion_intents(intents, sample['intents'])
             loss_slot = criterion_slots(slots, sample['y_slots'])
             loss = loss_intent + loss_slot 
             loss_array.append(loss.item())
+            
             # Intent inference
-            # Get the highest probable class
-            out_intents = [lang.id2intent[x] 
-                           for x in torch.argmax(intents, dim=1).tolist()] 
+            out_intents = [lang.id2intent[x] for x in torch.argmax(intents, dim=1).tolist()] 
             gt_intents = [lang.id2intent[x] for x in sample['intents'].tolist()]
             ref_intents.extend(gt_intents)
             hyp_intents.extend(out_intents)
             
-
-            # Slot = [ batch, num_classi_slot, seq_len ]
-
             # Slot inference 
-            output_slots = torch.argmax(slots, dim=1) # prendo la classe con piu prob per ogni seq ?
+            output_slots = torch.argmax(slots, dim=1)
             for id_seq, seq in enumerate(output_slots):
                 length = sample['slots_len'].tolist()[id_seq]
                 utt_ids = sample['utterance'][id_seq][:length].tolist()
@@ -70,21 +99,32 @@ def eval_loop(data, criterion_slots, criterion_intents, model, lang):
                 for id_el, elem in enumerate(to_decode):
                     tmp_seq.append((utterance[id_el], lang.id2slot[elem]))
                 hyp_slots.append(tmp_seq)
-    try:            
+    try:
+        # Evaluate the model for slot filling
         results = evaluate(ref_slots, hyp_slots)
     except Exception as ex:
-        # Sometimes the model predicts a class that is not in REF
         print("Warning:", ex)
         ref_s = set([x[1] for x in ref_slots])
         hyp_s = set([x[1] for x in hyp_slots])
         print(hyp_s.difference(ref_s))
         results = {"total":{"f":0}}
-        
-    report_intent = classification_report(ref_intents, hyp_intents, 
-                                          zero_division=False, output_dict=True)
+    # Evaluate the model for intent classification
+    report_intent = classification_report(ref_intents, hyp_intents, zero_division=False, output_dict=True)
+    
     return results, report_intent, loss_array
 
 def init_weights(mat):
+    """
+    Initializes the weights of the given module using Xavier initialization for recurrent layers
+    and uniform initialization for linear layers. Sets biases to zero or a constant value.
+
+    Args:
+        mat (nn.Module): The module for which to initialize the weights.
+
+    Returns:
+        None
+    """
+
     for m in mat.modules():
         if type(m) in [nn.GRU, nn.LSTM, nn.RNN]:
             for name, param in m.named_parameters():
@@ -143,7 +183,19 @@ def save_model_incrementally(model, sampled_epochs, losses_train, losses_dev, ac
     torch.save(model, model_path)
     print(f'Model saved to {model_path}')
 
-def save_plot_losses(sampled_epochs,losses_train,losses_dev,path):
+def save_plot_losses(sampled_epochs, losses_train, losses_dev, path):
+    """
+    Save a plot of training and validation losses.
+
+    Args:
+        sampled_epochs (list): A list of lists, where each inner list represents the epochs run for a particular iteration.
+        losses_train (list): A list of training losses for each iteration.
+        losses_dev (list): A list of validation losses for each iteration.
+        path (str): The path to save the plot.
+
+    Returns:
+        None
+    """
 
     plt.figure(figsize=(10, 6)) 
 
@@ -164,9 +216,20 @@ def save_plot_losses(sampled_epochs,losses_train,losses_dev,path):
     plt.grid(True)  
     plt.tight_layout()  
 
-    plt.savefig(os.path.join(path,"losses.png")) 
+    plt.savefig(os.path.join(path, "losses.png"))
 
-def save_plot_accuracy(sampled_epochs,accuracy_history,path):
+def save_plot_accuracy(sampled_epochs, accuracy_history, path):
+    """
+    Save a plot of accuracy over epochs.
+
+    Args:
+        sampled_epochs (list): A list of lists, where each inner list represents the epochs run for a specific training.
+        accuracy_history (list): A list of accuracy values corresponding to each epoch.
+        path (str): The path where the plot should be saved.
+
+    Returns:
+        None
+    """
 
     plt.figure(figsize=(10, 6)) 
     prev = 0
@@ -184,4 +247,4 @@ def save_plot_accuracy(sampled_epochs,accuracy_history,path):
     plt.grid(True) 
     plt.tight_layout()  
 
-    plt.savefig(os.path.join(path,"accuracy.png")) 
+    plt.savefig(os.path.join(path, "accuracy.png"))

@@ -18,36 +18,38 @@ class ModelIAS(nn.Module):
         self.dropout = nn.Dropout(dropout)
         
     def forward(self, utterance, seq_lengths):
-        # utterance.size() = batch_size X seq_len
-        utt_emb = self.embedding(utterance) # utt_emb.size() = batch_size X seq_len X emb_size
+
+        """
+        Forward pass of the model.
+
+        Args:
+            utterance (torch.Tensor): Input utterance tensor of shape (batch_size, seq_len).
+            seq_lengths (torch.Tensor): Tensor containing the lengths of each sequence in the batch, of shape (batch_size,).
+
+        Returns:
+            torch.Tensor: Slot logits tensor of shape (batch_size, classes, seq_len).
+            torch.Tensor: Intent logits tensor of shape (batch_size, num_intents).
+        """
+
+        utt_emb = self.embedding(utterance) 
         utt_emb = self.dropout(utt_emb)
         # pack_padded_sequence avoid computation over pad tokens reducing the computational cost
-        
         packed_input = pack_padded_sequence(utt_emb, seq_lengths.cpu().numpy(), batch_first=True)
         # Process the batch
         packed_output, (last_hidden, cell) = self.utt_encoder(packed_input) 
-       
         # Unpack the sequence
         utt_encoded, input_sizes = pad_packed_sequence(packed_output, batch_first=True)
-
         if self.utt_encoder.bidirectional:
             last_hidden = torch.cat((last_hidden[-2], last_hidden[-1]), dim=1)  # Concatenate forward and backward
         else:
             # Get the last hidden state
             last_hidden = last_hidden[-1,:,:]
-        
-        # Is this another possible way to get the last hiddent state? (Why?)
-        # utt_encoded.permute(1,0,2)[-1]
-        
         # Compute slot logits
         utt_encoded = self.dropout(utt_encoded)
         slots = self.slot_out(utt_encoded)
-        
         # Compute intent logits
         last_hidden = self.dropout(last_hidden)
         intent = self.intent_out(last_hidden)
-        
-        
         # Slot size: batch_size, seq_len, classes 
         slots = slots.permute(0,2,1) # We need this for computing the loss
         # Slot size: batch_size, classes, seq_len
